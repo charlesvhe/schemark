@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Schemark Web</title>
+  <link rel="stylesheet" href="/vendor/index.css" />
+  <style>
+    html, body, #app { height: 100%; margin: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; }
+    #app { display: flex; flex-direction: column; min-height: 0; }
+    .skipped-panel { flex: 0 0 auto; margin-bottom: 12px; }
+    .header { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .header h1 { margin: 0; font-size: 18px; white-space: nowrap; }
+    .column-select { flex: 1; min-width: 280px; }
+    .table-wrap { flex: 1; min-height: 0; }
+    .cell-link { color: #409eff; cursor: pointer; text-decoration: none; }
+    .cell-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script src="/vendor/index.full.min.js"></script>
+  <script src="/vendor/xlsx.full.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

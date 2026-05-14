@@ -1,10 +1,10 @@
 {
   "name": "schemark",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "用 JSON Schema 约束 Markdown 文档仓库的目录结构、文件命名与 Frontmatter",
   "type": "module",
   "bin": {
-    "schemark": "./bin/schemark.mjs"
+    "schemark": "bin/schemark.mjs"
   },
   "exports": {
     ".": {
@@ -35,12 +35,16 @@
     "@biomejs/biome": "^1.9.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
+    "element-plus": "^2.14.0",
     "tsup": "^8.3.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "vue": "^3.5.34",
+    "xlsx": "^0.18.5"
   },
   "files": [
     "dist",
+    "dist/static/**",
     "bin",
     "schemark.schema.json"
   ],

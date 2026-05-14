@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { resolve } from "node:path";
 import { runValid } from "./commands/valid.js";
 import { runMeta } from "./commands/meta.js";
+import { runWeb } from "./commands/web.js";
 
 export function buildCli(): Command {
   const program = new Command();
@@ -37,6 +38,25 @@ export function buildCli(): Command {
       if (result.stdout) process.stdout.write(`${result.stdout}\n`);
       if (result.stderr) process.stderr.write(`${result.stderr}\n`);
       process.exit(result.exitCode);
+    });
+
+  program
+    .command("web")
+    .description("Start a local web server that renders schemark meta as a table")
+    .argument("[dir]", "Root directory to scan", ".")
+    .option("-p, --port <port>", "Port to listen on", "6789")
+    .action(async (dir: string, opts: { port: string }) => {
+      const target = resolve(process.cwd(), dir);
+      const port = Number.parseInt(opts.port, 10);
+      if (!Number.isFinite(port) || port <= 0 || port > 65535) {
+        process.stderr.write(`无效端口: ${opts.port}\n`);
+        process.exit(1);
+      }
+      try {
+        await runWeb(target, { port });
+      } catch {
+        process.exit(1);
+      }
     });
 
   return program;

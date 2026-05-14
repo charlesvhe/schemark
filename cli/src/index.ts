@@ -41,3 +41,5 @@ export {
 
 export { runValid, type ValidOptions, type ValidResult } from "./commands/valid.js";
 export { runMeta, type MetaOptions, type MetaResult } from "./commands/meta.js";
+export { runWeb, type WebOptions } from "./commands/web.js";
+export { flattenRow, type FlatRow } from "./flatten.js";
