@@ -52,4 +52,32 @@ describe("runValid", () => {
     expect(r.exitCode).toBe(1);
     expect(r.output.toLowerCase()).toContain("schemark.json");
   });
+
+  it("required:true 缺失被报告", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      files: { readme: { pattern: "^readme\\.md$", required: true } },
+    });
+    const r = runValid(root, { json: true });
+    expect(r.exitCode).toBe(1);
+    const parsed = JSON.parse(r.output) as Array<{ type: string }>;
+    expect(parsed.some((e) => e.type === "missing-required-rule")).toBe(true);
+  });
+
+  it("路径 typeKey 重名被识别为 duplicate-typekey", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      directories: {
+        sprint: {
+          pattern: "^s$",
+          files: { sprint: { pattern: "^x\\.md$" } },
+        },
+      },
+    });
+    writeFixture(root, [{ path: "s/x.md", content: "---\n---\n" }]);
+    const r = runValid(root, { json: true });
+    expect(r.exitCode).toBe(1);
+    const parsed = JSON.parse(r.output) as Array<{ type: string }>;
+    expect(parsed.some((e) => e.type === "duplicate-typekey")).toBe(true);
+  });
 });

@@ -41,42 +41,32 @@ export const ROOT_CONFIG = {
   directories: {
     milestone: {
       pattern: "^(?<start>\\d{8})-(?<end>\\d{8})-(?<name>.+)$",
-      meta: {
-        namespace: "milestone",
-        fields: {
-          start: { type: "string", format: "date" },
-          end: { type: "string", format: "date" },
-          name: { type: "string" },
-        },
-      },
+      type: "milestone",
+      start: { type: "string", format: "date", value: "${start}" },
+      end: { type: "string", format: "date", value: "${end}" },
+      name: "${start}-${name}",
       files: {
         meeting: {
           pattern: "^meeting-(?<date>\\d{8})-(?<title>.+)\\.md$",
+          date: { type: "string", format: "date", value: "${date}" },
+          name: "meeting-${title}",
           frontmatter: {
-            fields: {
+            properties: {
               attendees: { type: "array", items: { type: "string" } },
               duration: { type: "integer", minimum: 0 },
             },
-          },
-          meta: {
-            namespace: "file",
-            fields: {
-              date: { type: "string", format: "date" },
-              title: { type: "string" },
-            },
+            required: ["attendees"],
           },
         },
         design: {
           pattern: "^design-(?<title>.+)\\.md$",
+          name: "${title}",
           frontmatter: {
-            fields: {
+            properties: {
               author: { type: "string" },
               status: { type: "string", enum: ["draft", "review", "approved"] },
             },
-          },
-          meta: {
-            namespace: "file",
-            fields: { title: { type: "string" } },
+            required: ["author", "status"],
           },
         },
       },

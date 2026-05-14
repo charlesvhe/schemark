@@ -16,7 +16,7 @@ describe("runMeta", () => {
 
   afterEach(() => cleanup());
 
-  it("产出 README 示例对应的派生 meta", () => {
+  it("产出 v2 平铺结构的派生 meta", () => {
     writeJson(root, "schemark.json", ROOT_CONFIG);
     writeFixture(root, [
       {
@@ -28,11 +28,16 @@ describe("runMeta", () => {
     const r = runMeta(root);
     expect(r.exitCode).toBe(0);
     expect(r.files).toHaveLength(1);
-    expect(r.files[0]!.meta).toEqual({
-      milestone: { start: "2026-04-01", end: "2026-04-30", name: "项目启动" },
-      file: { type: "meeting", date: "2026-04-15", title: "站会纪要" },
+    const f = r.files[0]!;
+    expect(f.milestone).toEqual({
+      type: "milestone",
+      start: "2026-04-01",
+      end: "2026-04-30",
+      name: "20260401-项目启动",
     });
-    expect(r.files[0]!.frontmatter).toEqual({ attendees: ["张三", "李四"], duration: 30 });
+    expect(f.meeting).toEqual({ date: "2026-04-15", name: "meeting-站会纪要" });
+    expect(f.frontmatter).toEqual({ attendees: ["张三", "李四"], tags: ["daily"], duration: 30 });
+    expect((f as Record<string, unknown>).meta).toBeUndefined();
   });
 
   it("--output 将 JSON 写入文件", () => {
@@ -51,13 +56,13 @@ describe("runMeta", () => {
     expect(parsed).toHaveLength(1);
   });
 
-  it("默认不因为转换失败导致退出码 1，但会写 stderr 并跳过文件", () => {
+  it("默认不因为转换失败导致退出码 1,但会写 stderr 并跳过文件", () => {
     writeJson(root, "schemark.json", {
       strict: true,
       files: {
         x: {
           pattern: "^x-(?<n>.+)\\.md$",
-          meta: { fields: { n: { type: "integer" } } },
+          n: { type: "integer", value: "${n}" },
         },
       },
     });
@@ -74,7 +79,7 @@ describe("runMeta", () => {
       files: {
         x: {
           pattern: "^x-(?<n>.+)\\.md$",
-          meta: { fields: { n: { type: "integer" } } },
+          n: { type: "integer", value: "${n}" },
         },
       },
     });
@@ -88,5 +93,17 @@ describe("runMeta", () => {
     const r = runMeta(root);
     expect(r.exitCode).toBe(0);
     expect(JSON.parse(r.stdout)).toEqual([]);
+  });
+
+  it("required:true 缺失时退出码 1(默认)", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      files: {
+        readme: { pattern: "^readme\\.md$", required: true },
+      },
+    });
+    const r = runMeta(root);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("missing-required-rule");
   });
 });

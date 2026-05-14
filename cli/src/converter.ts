@@ -1,4 +1,4 @@
-export interface FieldDef {
+export interface ConvertSchemaPart {
   type?: string | string[];
   format?: string;
   [key: string]: unknown;
@@ -16,7 +16,11 @@ const FORBIDDEN_CAPTURE_TYPES = new Set(["array", "object", "null"]);
 const DATE_YYYYMMDD = /^\d{8}$/;
 const DATE_ISO = /^\d{4}-\d{2}-\d{2}$/;
 
-export function convertCaptureValue(field: string, raw: string, def: FieldDef | undefined): unknown {
+export function convertCaptureValue(
+  field: string,
+  raw: string,
+  def: ConvertSchemaPart | undefined,
+): unknown {
   const t = def?.type;
   const typeStr = Array.isArray(t) ? t[0] : t;
 

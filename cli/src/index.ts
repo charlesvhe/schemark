@@ -1,16 +1,17 @@
 export {
   loadConfigFromFile,
   findConfigInDir,
-  compilePatterns,
+  validateConfigInvariants,
   configToEffective,
   inheritFromParent,
+  getMetaFieldEntries,
   ConfigError,
   type SchemarkConfig,
   type DirectoryRule,
   type FileRule,
   type EffectiveConfig,
-  type MetaSpec,
-  type FrontmatterSpec,
+  type MetaFieldValue,
+  type MetaFieldObject,
 } from "./loader.js";
 
 export {
@@ -30,8 +31,13 @@ export {
 export {
   convertCaptureValue,
   ConversionError,
-  type FieldDef,
+  type ConvertSchemaPart,
 } from "./converter.js";
+
+export {
+  renderTemplate,
+  TemplateError,
+} from "./template.js";
 
 export { runValid, type ValidOptions, type ValidResult } from "./commands/valid.js";
 export { runMeta, type MetaOptions, type MetaResult } from "./commands/meta.js";

@@ -16,8 +16,9 @@ export interface MetaResult {
 
 const SKIP_TYPES: ReadonlySet<ResolveError["type"]> = new Set([
   "conversion",
-  "missing-required-capture",
-  "namespace-conflict",
+  "template-undefined-capture",
+  "template-syntax",
+  "meta-validation",
 ]);
 
 export function runMeta(dir: string, options: MetaOptions = {}): MetaResult {

@@ -1,36 +1,43 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-export interface MetaSpec {
-  namespace?: string;
-  fields?: Record<string, FieldSpec>;
-  required?: string[];
-}
+const RESERVED_DIR_KEYS = new Set(["pattern", "required", "directories", "files"]);
+const RESERVED_FILE_KEYS = new Set(["pattern", "required", "frontmatter"]);
 
-export interface FrontmatterSpec {
-  fields?: Record<string, unknown>;
-  required?: string[];
-}
-
-export interface FieldSpec {
+export interface MetaFieldObject {
+  value: string;
   type?: string | string[];
   format?: string;
-  pattern?: string;
   enum?: unknown[];
+  pattern?: string;
+  minimum?: number;
+  maximum?: number;
+  minLength?: number;
+  maxLength?: number;
+  description?: string;
+  default?: unknown;
+  const?: unknown;
+  oneOf?: unknown[];
+  anyOf?: unknown[];
+  allOf?: unknown[];
   [k: string]: unknown;
 }
 
+export type MetaFieldValue = string | MetaFieldObject;
+
 export interface DirectoryRule {
   pattern: string;
-  meta?: MetaSpec;
+  required?: boolean;
   directories?: Record<string, DirectoryRule>;
   files?: Record<string, FileRule>;
+  [metaField: string]: unknown;
 }
 
 export interface FileRule {
   pattern: string;
-  meta?: MetaSpec;
-  frontmatter?: FrontmatterSpec;
+  required?: boolean;
+  frontmatter?: Record<string, unknown>;
+  [metaField: string]: unknown;
 }
 
 export interface SchemarkConfig {
@@ -38,11 +45,6 @@ export interface SchemarkConfig {
   strict?: boolean;
   directories?: Record<string, DirectoryRule>;
   files?: Record<string, FileRule>;
-}
-
-export interface LoadedConfig {
-  config: SchemarkConfig;
-  source: string;
 }
 
 export class ConfigError extends Error {
@@ -71,33 +73,59 @@ export function findConfigInDir(dir: string): string | undefined {
   return existsSync(candidate) ? candidate : undefined;
 }
 
-export function compilePatterns(config: SchemarkConfig, source: string): void {
-  walk(config.directories, source, "directories");
-  walk(config.files, source, "files");
+export function validateConfigInvariants(config: SchemarkConfig, source: string): void {
+  walkRules(config.directories, source, "directories", true, []);
+  walkRules(config.files, source, "files", false, []);
 }
 
-function walk(
+function walkRules(
   rules: Record<string, DirectoryRule | FileRule> | undefined,
   source: string,
   path: string,
+  isDir: boolean,
+  ancestorTypeKeys: string[],
 ): void {
   if (!rules) return;
-  for (const [key, rule] of Object.entries(rules)) {
+  for (const [typeKey, rule] of Object.entries(rules)) {
+    if (ancestorTypeKeys.includes(typeKey)) {
+      throw new ConfigError(
+        source,
+        `${path}.${typeKey}: 解析路径上 typeKey "${typeKey}" 重复(祖先链: ${ancestorTypeKeys.join(" → ")})`,
+      );
+    }
+    if (typeof rule.pattern !== "string") {
+      throw new ConfigError(source, `${path}.${typeKey}.pattern 缺失或非字符串`);
+    }
     try {
-      // eslint-disable-next-line no-new
       new RegExp(rule.pattern);
     } catch (e) {
       throw new ConfigError(
         source,
-        `${path}.${key}.pattern 不是合法的正则表达式: ${(e as Error).message}`,
+        `${path}.${typeKey}.pattern 不是合法的正则表达式: ${(e as Error).message}`,
       );
     }
-    if ("directories" in rule && rule.directories) {
-      walk(rule.directories, source, `${path}.${key}.directories`);
+    const reservedKeys = isDir ? RESERVED_DIR_KEYS : RESERVED_FILE_KEYS;
+    for (const [k, v] of Object.entries(rule)) {
+      if (reservedKeys.has(k)) continue;
+      validateMetaFieldValue(v, source, `${path}.${typeKey}.${k}`);
     }
-    if ("files" in rule && rule.files) {
-      walk(rule.files, source, `${path}.${key}.files`);
+    const childAncestors = [...ancestorTypeKeys, typeKey];
+    if (isDir) {
+      const dirRule = rule as DirectoryRule;
+      walkRules(dirRule.directories, source, `${path}.${typeKey}.directories`, true, childAncestors);
+      walkRules(dirRule.files, source, `${path}.${typeKey}.files`, false, childAncestors);
     }
+  }
+}
+
+function validateMetaFieldValue(v: unknown, source: string, fieldPath: string): void {
+  if (typeof v === "string") return;
+  if (typeof v !== "object" || v === null || Array.isArray(v)) {
+    throw new ConfigError(source, `${fieldPath}: meta 字段值必须是字符串或对象`);
+  }
+  const obj = v as Record<string, unknown>;
+  if (typeof obj.value !== "string") {
+    throw new ConfigError(source, `${fieldPath}.value 必填,且必须是字符串模板`);
   }
 }
 
@@ -127,4 +155,17 @@ export function inheritFromParent(
     files: parentMatched?.files ?? {},
     source: `<inherited at ${dirPath}>`,
   };
+}
+
+export function getMetaFieldEntries(
+  rule: DirectoryRule | FileRule,
+  isDir: boolean,
+): Array<[string, MetaFieldValue]> {
+  const reserved = isDir ? RESERVED_DIR_KEYS : RESERVED_FILE_KEYS;
+  const out: Array<[string, MetaFieldValue]> = [];
+  for (const [k, v] of Object.entries(rule)) {
+    if (reserved.has(k)) continue;
+    out.push([k, v as MetaFieldValue]);
+  }
+  return out;
 }

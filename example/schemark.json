@@ -2,204 +2,80 @@
   "$schema": "../schemark.schema.json",
   "strict": true,
   "directories": {
-    "iteration": {
+    "sprint": {
       "pattern": "^(?<name>(?<start>\\d{8})-(?<end>\\d{8})-.+)$",
-      "meta": {
-        "namespace": "sprint",
-        "fields": {
-          "start": {
-            "type": "string",
-            "format": "date"
-          },
-          "end": {
-            "type": "string",
-            "format": "date"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "start",
-          "end",
-          "name"
-        ]
-      },
+      "type": "sprint",
+      "start": { "type": "string", "format": "date", "value": "${start}" },
+      "end": { "type": "string", "format": "date", "value": "${end}" },
+      "name": "${name}",
       "files": {
         "overview": {
           "pattern": "^overview\\.md$",
+          "required": true,
           "frontmatter": {
-            "fields": {
+            "properties": {
               "goals": {
                 "type": "array",
-                "items": {
-                  "type": "string"
-                },
+                "items": { "type": "string" },
                 "minItems": 1
               },
-              "owner": {
-                "type": "string"
-              },
+              "owner": { "type": "string" },
               "status": {
                 "type": "string",
-                "enum": [
-                  "planned",
-                  "in-progress",
-                  "completed",
-                  "cancelled"
-                ]
+                "enum": ["进行中", "完成", "取消"]
               }
             },
-            "required": [
-              "goals",
-              "owner",
-              "status"
-            ]
+            "required": ["goals", "owner", "status"]
           }
         },
         "task": {
-          "pattern": "^task-(?<id>T\\d{4})-(?<title>.+)\\.md$",
+          "pattern": "^(?<id>T\\d{4})-(?<title>.+)\\.md$",
+          "type": "task",
+          "id": { "type": "string", "pattern": "^T\\d{4}$", "value": "${id}" },
+          "title": "${title}",
           "frontmatter": {
-            "fields": {
-              "assignee": {
-                "type": "string"
-              },
+            "properties": {
+              "assignee": { "type": "string" },
               "status": {
                 "type": "string",
-                "enum": [
-                  "todo",
-                  "doing",
-                  "review",
-                  "done",
-                  "blocked"
-                ]
+                "enum": ["进行中", "完成", "取消"]
               },
-              "priority": {
-                "type": "string",
-                "enum": [
-                  "high",
-                  "medium",
-                  "low"
-                ]
-              },
-              "estimated-hours": {
-                "type": "number",
-                "minimum": 0
-              },
-              "actual-hours": {
-                "type": "number",
-                "minimum": 0
-              },
-              "tags": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
+              "priority": { "type": "string", "enum": ["高", "中", "低"] },
+              "hours": { "type": "number", "minimum": 0 },
+              "tags": { "type": "array", "items": { "type": "string" } },
               "depends-on": {
                 "type": "array",
-                "items": {
-                  "type": "string",
-                  "pattern": "^T\\d{4}$"
-                }
+                "items": { "type": "string", "pattern": "^T\\d{4}$" }
               }
             },
-            "required": [
-              "assignee",
-              "status",
-              "priority"
-            ]
-          },
-          "meta": {
-            "namespace": "task",
-            "fields": {
-              "id": {
-                "type": "string",
-                "pattern": "^T\\d{4}$"
-              },
-              "title": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "title"
-            ]
+            "required": ["assignee", "status", "priority"]
           }
         },
         "bug": {
-          "pattern": "^bug-(?<id>B\\d{4})-(?<title>.+)\\.md$",
+          "pattern": "^(?<id>B\\d{4})-(?<title>.+)\\.md$",
+          "type": "bug",
+          "id": { "type": "string", "pattern": "^B\\d{4}$", "value": "${id}" },
+          "title": "${title}",
           "frontmatter": {
-            "fields": {
-              "reporter": {
-                "type": "string"
-              },
-              "assignee": {
-                "type": "string"
-              },
-              "severity": {
+            "properties": {
+              "reporter": { "type": "string" },
+              "assignee": { "type": "string" },
+              "critical": {
                 "type": "string",
-                "enum": [
-                  "low",
-                  "medium",
-                  "high",
-                  "critical"
-                ]
+                "enum": ["高", "中", "低", "阻塞"]
               },
               "status": {
                 "type": "string",
-                "enum": [
-                  "open",
-                  "confirmed",
-                  "fixing",
-                  "verifying",
-                  "closed",
-                  "wontfix"
-                ]
+                "enum": ["进行中", "完成", "取消"]
               },
-              "found-at": {
-                "type": "string",
-                "format": "date"
-              },
-              "fixed-at": {
-                "type": "string",
-                "format": "date"
-              },
-              "affected-versions": {
+              "fixed-at": { "type": "string", "format": "date" },
+              "tags": { "type": "array", "items": { "type": "string" } },
+              "ref-task": {
                 "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "tags": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
+                "items": { "type": "string", "pattern": "^T\\d{4}$" }
               }
             },
-            "required": [
-              "reporter",
-              "severity",
-              "status",
-              "found-at"
-            ]
-          },
-          "meta": {
-            "namespace": "bug",
-            "fields": {
-              "id": {
-                "type": "string",
-                "pattern": "^B\\d{4}$"
-              },
-              "title": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "title"
-            ]
+            "required": ["reporter", "critical", "status"]
           }
         }
       }

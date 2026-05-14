@@ -3,18 +3,22 @@ import { join, relative } from "node:path";
 import matter from "gray-matter";
 import yaml from "js-yaml";
 import {
-  compilePatterns,
   configToEffective,
   EffectiveConfig,
   FileRule,
   findConfigInDir,
+  getMetaFieldEntries,
   inheritFromParent,
   loadConfigFromFile,
+  validateConfigInvariants,
   type DirectoryRule,
+  type MetaFieldObject,
+  type MetaFieldValue,
   type SchemarkConfig,
 } from "./loader.js";
-import { compileSchema, formatAjvErrors, validateSchemarkConfig } from "./validator.js";
+import { compileSchema, formatAjvErrors, validateSchema, validateSchemarkConfig } from "./validator.js";
 import { convertCaptureValue, ConversionError } from "./converter.js";
+import { renderTemplate, TemplateError } from "./template.js";
 
 export interface ResolveError {
   path: string;
@@ -24,18 +28,21 @@ export interface ResolveError {
     | "unmatched-directory"
     | "unmatched-file"
     | "ambiguous-match"
-    | "missing-required-capture"
+    | "duplicate-typekey"
+    | "missing-required-rule"
     | "missing-required-frontmatter"
     | "frontmatter-validation"
     | "conversion"
-    | "namespace-conflict";
+    | "template-undefined-capture"
+    | "template-syntax"
+    | "meta-validation";
   message: string;
 }
 
 export interface ResolvedFile {
   path: string;
-  meta: Record<string, unknown>;
   frontmatter: Record<string, unknown>;
+  [typeKeyOrReserved: string]: unknown;
 }
 
 export interface ResolveResult {
@@ -57,7 +64,7 @@ interface MatchedFile {
 
 interface DirContext {
   effective: EffectiveConfig;
-  accumulatedMeta: Record<string, unknown>;
+  accumulatedGroups: Record<string, Record<string, unknown>>;
   parentMatch: MatchedDirectory | undefined;
 }
 
@@ -82,7 +89,7 @@ export function resolveDirectoryTree(rootDir: string): ResolveResult {
     rootDir,
     {
       effective: rootEffective,
-      accumulatedMeta: {},
+      accumulatedGroups: {},
       parentMatch: undefined,
     },
     result,
@@ -114,9 +121,11 @@ function loadAndValidateConfig(
     return undefined;
   }
   try {
-    compilePatterns(config, configPath);
+    validateConfigInvariants(config, configPath);
   } catch (e) {
-    errors.push({ path: configPath, type: "config-error", message: (e as Error).message });
+    const msg = (e as Error).message;
+    const type: ResolveError["type"] = msg.includes("typeKey") ? "duplicate-typekey" : "config-error";
+    errors.push({ path: configPath, type, message: msg });
     return undefined;
   }
   return configToEffective(config, configPath);
@@ -135,6 +144,9 @@ function walk(rootDir: string, dir: string, ctx: DirContext, result: ResolveResu
     return;
   }
 
+  const matchedDirTypeKeys = new Set<string>();
+  const matchedFileTypeKeys = new Set<string>();
+
   for (const entry of entries) {
     if (entry === "schemark.json") continue;
     const full = join(dir, entry);
@@ -145,9 +157,42 @@ function walk(rootDir: string, dir: string, ctx: DirContext, result: ResolveResu
       continue;
     }
     if (s.isDirectory()) {
-      handleDirectory(rootDir, full, entry, ctx, result);
+      const matchedKey = handleDirectory(rootDir, full, entry, ctx, result);
+      if (matchedKey) matchedDirTypeKeys.add(matchedKey);
     } else if (s.isFile()) {
-      handleFile(rootDir, full, entry, ctx, result);
+      const matchedKey = handleFile(rootDir, full, entry, ctx, result);
+      if (matchedKey) matchedFileTypeKeys.add(matchedKey);
+    }
+  }
+
+  enforceRequiredRules(rootDir, dir, ctx, matchedDirTypeKeys, matchedFileTypeKeys, result);
+}
+
+function enforceRequiredRules(
+  rootDir: string,
+  dir: string,
+  ctx: DirContext,
+  matchedDirTypeKeys: Set<string>,
+  matchedFileTypeKeys: Set<string>,
+  result: ResolveResult,
+): void {
+  const rel = relative(rootDir, dir) || ".";
+  for (const [typeKey, rule] of Object.entries(ctx.effective.directories)) {
+    if (rule.required === true && !matchedDirTypeKeys.has(typeKey)) {
+      result.errors.push({
+        path: rel,
+        type: "missing-required-rule",
+        message: `directories.${typeKey} 标记 required: true,但 ${rel} 下没有任何匹配项`,
+      });
+    }
+  }
+  for (const [typeKey, rule] of Object.entries(ctx.effective.files)) {
+    if (rule.required === true && !matchedFileTypeKeys.has(typeKey)) {
+      result.errors.push({
+        path: rel,
+        type: "missing-required-rule",
+        message: `files.${typeKey} 标记 required: true,但 ${rel} 下没有任何匹配项`,
+      });
     }
   }
 }
@@ -158,7 +203,7 @@ function handleDirectory(
   name: string,
   ctx: DirContext,
   result: ResolveResult,
-): void {
+): string | undefined {
   const rel = relative(rootDir, fullPath);
   const matches = matchRules(name, ctx.effective.directories);
 
@@ -170,7 +215,7 @@ function handleDirectory(
         message: `目录名 "${name}" 未匹配任何 directories.pattern`,
       });
     }
-    return;
+    return undefined;
   }
   if (matches.length > 1) {
     result.errors.push({
@@ -178,34 +223,38 @@ function handleDirectory(
       type: "ambiguous-match",
       message: `目录名 "${name}" 同时匹配多条规则: ${matches.map((m) => m.typeKey).join(", ")}`,
     });
-    return;
+    return undefined;
   }
 
   const matched = matches[0]!;
   const dirRule = matched.rule as DirectoryRule;
 
-  let metaForThisDir: Record<string, unknown>;
+  let metaForThisDir: Record<string, unknown> | undefined;
   try {
-    metaForThisDir = buildMetaFromCaptures(
-      matched.captures,
-      dirRule.meta,
-      matched.typeKey,
-      false,
-      rel,
-    );
+    metaForThisDir = deriveMetaFields(dirRule, true, matched.captures, rel);
   } catch (e) {
     pushDeriveError(e, rel, result);
-    return;
+    return matched.typeKey;
   }
 
-  const merged = mergeMeta(ctx.accumulatedMeta, metaForThisDir, rel, result);
-  if (!merged) return;
+  if (matched.typeKey in ctx.accumulatedGroups) {
+    result.errors.push({
+      path: rel,
+      type: "duplicate-typekey",
+      message: `运行时 typeKey 冲突: "${matched.typeKey}" 在解析路径上重复`,
+    });
+    return matched.typeKey;
+  }
+  const nextGroups: Record<string, Record<string, unknown>> = {
+    ...ctx.accumulatedGroups,
+    [matched.typeKey]: metaForThisDir,
+  };
 
   const childConfigPath = findConfigInDir(fullPath);
   let childEffective: EffectiveConfig;
   if (childConfigPath) {
     const loaded = loadAndValidateConfig(childConfigPath, result.errors);
-    if (!loaded) return;
+    if (!loaded) return matched.typeKey;
     childEffective = loaded;
   } else {
     childEffective = inheritFromParent(dirRule, rel);
@@ -216,11 +265,12 @@ function handleDirectory(
     fullPath,
     {
       effective: childEffective,
-      accumulatedMeta: merged,
+      accumulatedGroups: nextGroups,
       parentMatch: matched,
     },
     result,
   );
+  return matched.typeKey;
 }
 
 function handleFile(
@@ -229,8 +279,8 @@ function handleFile(
   name: string,
   ctx: DirContext,
   result: ResolveResult,
-): void {
-  if (!name.endsWith(".md")) return;
+): string | undefined {
+  if (!name.endsWith(".md")) return undefined;
   const rel = relative(rootDir, fullPath);
   const matches = matchRules(name, ctx.effective.files);
 
@@ -242,7 +292,7 @@ function handleFile(
         message: `文件名 "${name}" 未匹配任何 files.pattern`,
       });
     }
-    return;
+    return undefined;
   }
   if (matches.length > 1) {
     result.errors.push({
@@ -250,7 +300,7 @@ function handleFile(
       type: "ambiguous-match",
       message: `文件名 "${name}" 同时匹配多条规则: ${matches.map((m) => m.typeKey).join(", ")}`,
     });
-    return;
+    return undefined;
   }
 
   const matched = matches[0]!;
@@ -258,19 +308,31 @@ function handleFile(
 
   let fileMeta: Record<string, unknown>;
   try {
-    fileMeta = buildMetaFromCaptures(matched.captures, fileRule.meta, matched.typeKey, true, rel);
+    fileMeta = deriveMetaFields(fileRule, false, matched.captures, rel);
   } catch (e) {
     pushDeriveError(e, rel, result);
-    return;
+    return matched.typeKey;
   }
 
-  const meta = mergeMeta(ctx.accumulatedMeta, fileMeta, rel, result);
-  if (!meta) return;
+  if (matched.typeKey in ctx.accumulatedGroups) {
+    result.errors.push({
+      path: rel,
+      type: "duplicate-typekey",
+      message: `运行时 typeKey 冲突: "${matched.typeKey}" 在解析路径上重复`,
+    });
+    return matched.typeKey;
+  }
 
   const fm = extractFrontmatter(fullPath, fileRule, rel, result);
-  if (fm === undefined) return;
+  if (fm === undefined) return matched.typeKey;
 
-  result.files.push({ path: rel, meta, frontmatter: fm });
+  const out: ResolvedFile = { path: rel, frontmatter: fm };
+  for (const [k, v] of Object.entries(ctx.accumulatedGroups)) {
+    out[k] = v;
+  }
+  out[matched.typeKey] = fileMeta;
+  result.files.push(out);
+  return matched.typeKey;
 }
 
 function matchRules<R extends { pattern: string }>(
@@ -288,111 +350,62 @@ function matchRules<R extends { pattern: string }>(
   return out;
 }
 
-function buildMetaFromCaptures(
+function deriveMetaFields(
+  rule: DirectoryRule | FileRule,
+  isDir: boolean,
   captures: Record<string, string>,
-  spec: { namespace?: string; fields?: Record<string, unknown>; required?: string[] } | undefined,
-  typeKey: string,
-  isFile: boolean,
   pathForError: string,
 ): Record<string, unknown> {
-  const namespace = spec?.namespace;
-  const fields = (spec?.fields ?? {}) as Record<string, { type?: string; format?: string }>;
-  const required = spec?.required ?? [];
-
-  for (const r of required) {
-    const v = captures[r];
-    if (v === undefined || v === "") {
-      throw new MissingRequiredCaptureError(r, pathForError);
-    }
+  const out: Record<string, unknown> = {};
+  for (const [field, value] of getMetaFieldEntries(rule, isDir)) {
+    out[field] = computeMetaField(field, value, captures, pathForError);
   }
-
-  const inner: Record<string, unknown> = {};
-  if (isFile) {
-    inner.type = typeKey;
-  }
-  for (const [field, def] of Object.entries(fields)) {
-    if (field === "type") continue;
-    const raw = captures[field];
-    if (raw === undefined) continue;
-    inner[field] = convertCaptureValue(field, raw, def);
-  }
-  for (const [field, raw] of Object.entries(captures)) {
-    if (field in inner) continue;
-    if (field === "type") continue;
-    inner[field] = raw;
-  }
-
-  if (namespace) {
-    return { [namespace]: inner };
-  }
-  if (isFile) {
-    return { file: inner };
-  }
-  return inner;
+  return out;
 }
 
-class MissingRequiredCaptureError extends Error {
-  constructor(public field: string, public pathForError: string) {
-    super(`必填捕获组 "${field}" 缺失或为空`);
-    this.name = "MissingRequiredCaptureError";
+function computeMetaField(
+  field: string,
+  value: MetaFieldValue,
+  captures: Record<string, string>,
+  pathForError: string,
+): unknown {
+  if (typeof value === "string") {
+    return renderTemplate(field, value, captures);
+  }
+  const obj = value as MetaFieldObject;
+  const { value: tpl, ...schemaPart } = obj;
+  const rendered = renderTemplate(field, tpl, captures);
+  const converted = convertCaptureValue(field, rendered, schemaPart);
+  const issues = validateSchema(schemaPart, converted);
+  if (issues.length > 0) {
+    throw new MetaValidationError(field, issues.map((i) => i.message).join("; "));
+  }
+  return converted;
+}
+
+class MetaValidationError extends Error {
+  constructor(public field: string, message: string) {
+    super(message);
+    this.name = "MetaValidationError";
   }
 }
 
 function pushDeriveError(e: unknown, rel: string, result: ResolveResult): void {
-  if (e instanceof MissingRequiredCaptureError) {
-    result.errors.push({
-      path: rel,
-      type: "missing-required-capture",
-      message: e.message,
-    });
+  if (e instanceof TemplateError) {
+    const type: ResolveError["type"] =
+      e.reason === "undefined-capture" ? "template-undefined-capture" : "template-syntax";
+    result.errors.push({ path: rel, type, message: `${e.field}: ${e.message}` });
     return;
   }
   if (e instanceof ConversionError) {
     result.errors.push({ path: rel, type: "conversion", message: `${e.field}: ${e.message}` });
     return;
   }
+  if (e instanceof MetaValidationError) {
+    result.errors.push({ path: rel, type: "meta-validation", message: `${e.field}: ${e.message}` });
+    return;
+  }
   result.errors.push({ path: rel, type: "conversion", message: (e as Error).message });
-}
-
-function mergeMeta(
-  base: Record<string, unknown>,
-  addition: Record<string, unknown>,
-  pathForError: string,
-  result: ResolveResult,
-): Record<string, unknown> | undefined {
-  const out: Record<string, unknown> = { ...base };
-  for (const [k, v] of Object.entries(addition)) {
-    if (k in out) {
-      const existing = out[k];
-      if (
-        isPlainObject(existing) &&
-        isPlainObject(v) &&
-        !hasKeyConflict(existing as Record<string, unknown>, v as Record<string, unknown>)
-      ) {
-        out[k] = { ...(existing as object), ...(v as object) };
-        continue;
-      }
-      result.errors.push({
-        path: pathForError,
-        type: "namespace-conflict",
-        message: `meta 键 "${k}" 冲突，无法合并`,
-      });
-      return undefined;
-    }
-    out[k] = v;
-  }
-  return out;
-}
-
-function isPlainObject(v: unknown): boolean {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-function hasKeyConflict(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
-  for (const k of Object.keys(b)) {
-    if (k in a) return true;
-  }
-  return false;
 }
 
 function extractFrontmatter(
@@ -401,9 +414,6 @@ function extractFrontmatter(
   rel: string,
   result: ResolveResult,
 ): Record<string, unknown> | undefined {
-  const fmSpec = rule.frontmatter;
-  if (!fmSpec) return {};
-
   let parsedData: Record<string, unknown> = {};
   try {
     const raw = readFileSync(fullPath, "utf8");
@@ -422,50 +432,38 @@ function extractFrontmatter(
     return undefined;
   }
 
-  let hasError = false;
+  const fmSpec = rule.frontmatter;
+  if (!fmSpec) return parsedData;
 
-  const requiredList = fmSpec.required ?? [];
-  for (const reqField of requiredList) {
-    const v = parsedData[reqField];
-    if (v === undefined || v === null || v === "") {
-      result.errors.push({
-        path: rel,
-        type: "missing-required-frontmatter",
-        message: `missing required frontmatter field: ${reqField}`,
-      });
-      hasError = true;
-    }
-  }
-
-  const fields = fmSpec.fields ?? {};
-  const extracted: Record<string, unknown> = {};
-  for (const [k, schema] of Object.entries(fields)) {
-    if (!(k in parsedData)) continue;
-    extracted[k] = parsedData[k];
-    try {
-      const validate = compileSchema(schema);
-      const ok = validate(parsedData[k]);
-      if (!ok) {
-        const issues = formatAjvErrors(validate.errors);
-        for (const issue of issues) {
-          result.errors.push({
-            path: rel,
-            type: "frontmatter-validation",
-            message: `${k}${issue.path}: ${issue.message}`,
-          });
-        }
-        hasError = true;
+  const fullSchema: Record<string, unknown> = { type: "object", ...fmSpec };
+  try {
+    const validate = compileSchema(fullSchema);
+    const ok = validate(parsedData);
+    if (!ok) {
+      const issues = formatAjvErrors(validate.errors);
+      let hasMissing = false;
+      for (const issue of issues) {
+        const isRequired = issue.message.includes("must have required property");
+        result.errors.push({
+          path: rel,
+          type: isRequired ? "missing-required-frontmatter" : "frontmatter-validation",
+          message: `${issue.path}: ${issue.message}`,
+        });
+        if (isRequired) hasMissing = true;
       }
-    } catch (e) {
-      result.errors.push({
-        path: rel,
-        type: "frontmatter-validation",
-        message: `${k}: schema 编译失败 ${(e as Error).message}`,
-      });
-      hasError = true;
+      if (hasMissing && issues.length === issues.filter((i) => i.message.includes("must have required property")).length) {
+        return undefined;
+      }
+      return undefined;
     }
+  } catch (e) {
+    result.errors.push({
+      path: rel,
+      type: "frontmatter-validation",
+      message: `frontmatter schema 编译失败: ${(e as Error).message}`,
+    });
+    return undefined;
   }
 
-  if (hasError) return undefined;
-  return extracted;
+  return parsedData;
 }

@@ -14,7 +14,7 @@ describe("resolveDirectoryTree", () => {
 
   afterEach(() => cleanup());
 
-  it("从 README 示例派生 meta（含日期归一化和 type 注入）", () => {
+  it("派生 v2 平铺结构(模板插值 + 对象形式日期归一化)", () => {
     writeJson(root, "schemark.json", ROOT_CONFIG);
     writeFixture(root, [
       {
@@ -29,11 +29,15 @@ describe("resolveDirectoryTree", () => {
     expect(r.files).toHaveLength(1);
     const f = r.files[0]!;
     expect(f.path).toBe("20260401-20260430-项目启动/meeting-20260415-站会纪要.md");
-    expect(f.meta).toEqual({
-      milestone: { start: "2026-04-01", end: "2026-04-30", name: "项目启动" },
-      file: { type: "meeting", date: "2026-04-15", title: "站会纪要" },
+    expect(f.milestone).toEqual({
+      type: "milestone",
+      start: "2026-04-01",
+      end: "2026-04-30",
+      name: "20260401-项目启动",
     });
-    expect(f.frontmatter).toEqual({ attendees: ["张三", "李四"], duration: 30 });
+    expect(f.meeting).toEqual({ date: "2026-04-15", name: "meeting-站会纪要" });
+    expect(f.frontmatter).toEqual({ attendees: ["张三", "李四"], tags: ["daily"], duration: 30 });
+    expect((f as Record<string, unknown>).meta).toBeUndefined();
   });
 
   it("子级 schemark.json 完全覆盖父级嵌套定义", () => {
@@ -43,10 +47,7 @@ describe("resolveDirectoryTree", () => {
       files: {
         retrospective: {
           pattern: "^retro-(?<date>\\d{8})\\.md$",
-          meta: {
-            namespace: "file",
-            fields: { date: { type: "string", format: "date" } },
-          },
+          date: { type: "string", format: "date", value: "${date}" },
         },
       },
     });
@@ -63,7 +64,7 @@ describe("resolveDirectoryTree", () => {
 
     const r = resolveDirectoryTree(root);
     expect(r.files).toHaveLength(1);
-    expect(r.files[0]!.meta.file).toEqual({ type: "retrospective", date: "2026-04-30" });
+    expect(r.files[0]!.retrospective).toEqual({ date: "2026-04-30" });
     expect(r.errors.some((e) => e.type === "unmatched-file")).toBe(true);
   });
 
@@ -78,7 +79,7 @@ describe("resolveDirectoryTree", () => {
 
     const r = resolveDirectoryTree(root);
     expect(r.errors).toEqual([]);
-    expect(r.files[0]!.meta.file).toEqual({ type: "design", title: "用户登录" });
+    expect(r.files[0]!.design).toEqual({ name: "用户登录" });
   });
 
   it("文件名同时命中多条规则时报歧义错误", () => {
@@ -122,26 +123,11 @@ describe("resolveDirectoryTree", () => {
       files: {
         x: {
           pattern: "^x\\.md$",
-          frontmatter: { fields: { author: { type: "string" } }, required: ["author"] },
+          frontmatter: { properties: { author: { type: "string" } }, required: ["author"] },
         },
       },
     });
     writeFixture(root, [{ path: "x.md", content: "---\n---\n" }]);
-    const r = resolveDirectoryTree(root);
-    expect(r.errors.some((e) => e.type === "missing-required-frontmatter")).toBe(true);
-  });
-
-  it("frontmatter 必填字段值为空字符串视为缺失", () => {
-    writeJson(root, "schemark.json", {
-      strict: true,
-      files: {
-        x: {
-          pattern: "^x\\.md$",
-          frontmatter: { fields: { author: { type: "string" } }, required: ["author"] },
-        },
-      },
-    });
-    writeFixture(root, [{ path: "x.md", content: "---\nauthor: \"\"\n---\n" }]);
     const r = resolveDirectoryTree(root);
     expect(r.errors.some((e) => e.type === "missing-required-frontmatter")).toBe(true);
   });
@@ -153,7 +139,7 @@ describe("resolveDirectoryTree", () => {
         x: {
           pattern: "^x\\.md$",
           frontmatter: {
-            fields: {
+            properties: {
               status: { type: "string", enum: ["a", "b"] },
             },
           },
@@ -174,7 +160,7 @@ describe("resolveDirectoryTree", () => {
     expect(r.errors.some((e) => e.type === "config-invalid")).toBe(true);
   });
 
-  it("非法正则表达式报 config-error", () => {
+  it("非法正则表达式报 config-invalid 或 config-error", () => {
     writeJson(root, "schemark.json", {
       strict: true,
       files: { x: { pattern: "[invalid" } },
@@ -192,7 +178,7 @@ describe("resolveDirectoryTree", () => {
         x: {
           pattern: "^x\\.md$",
           frontmatter: {
-            fields: { "found-at": { type: "string", format: "date" } },
+            properties: { "found-at": { type: "string", format: "date" } },
             required: ["found-at"],
           },
         },
@@ -202,5 +188,110 @@ describe("resolveDirectoryTree", () => {
     const r = resolveDirectoryTree(root);
     expect(r.errors).toEqual([]);
     expect(r.files[0]!.frontmatter["found-at"]).toBe("2026-04-15");
+  });
+
+  it("路径上 typeKey 重复直接报 duplicate-typekey", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      directories: {
+        sprint: {
+          pattern: "^s$",
+          files: {
+            sprint: { pattern: "^x\\.md$" },
+          },
+        },
+      },
+    });
+    writeFixture(root, [{ path: "s/x.md", content: "---\n---\n" }]);
+    const r = resolveDirectoryTree(root);
+    expect(r.errors.some((e) => e.type === "duplicate-typekey")).toBe(true);
+  });
+
+  it("required:true 的子目录缺失时报 missing-required-rule", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      directories: {
+        ms: {
+          pattern: "^ms-.+$",
+          required: true,
+        },
+      },
+    });
+    const r = resolveDirectoryTree(root);
+    expect(r.errors.some((e) => e.type === "missing-required-rule")).toBe(true);
+  });
+
+  it("required:true 的子文件缺失时报 missing-required-rule", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      files: {
+        readme: {
+          pattern: "^readme\\.md$",
+          required: true,
+        },
+      },
+    });
+    const r = resolveDirectoryTree(root);
+    expect(r.errors.some((e) => e.type === "missing-required-rule")).toBe(true);
+  });
+
+  it("required:true 有匹配项时不报错", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      files: {
+        readme: { pattern: "^readme\\.md$", required: true },
+      },
+    });
+    writeFixture(root, [{ path: "readme.md", content: "---\n---\n" }]);
+    const r = resolveDirectoryTree(root);
+    expect(r.errors).toEqual([]);
+  });
+
+  it("模板引用未定义捕获组时报 template-undefined-capture", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      files: {
+        x: {
+          pattern: "^x\\.md$",
+          name: "${missing}",
+        },
+      },
+    });
+    writeFixture(root, [{ path: "x.md", content: "---\n---\n" }]);
+    const r = resolveDirectoryTree(root);
+    expect(r.errors.some((e) => e.type === "template-undefined-capture")).toBe(true);
+    expect(r.files).toHaveLength(0);
+  });
+
+  it("对象形式 enum 校验失败时报 meta-validation", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      files: {
+        x: {
+          pattern: "^x-(?<kind>.+)\\.md$",
+          kind: { type: "string", enum: ["a", "b"], value: "${kind}" },
+        },
+      },
+    });
+    writeFixture(root, [{ path: "x-c.md", content: "---\n---\n" }]);
+    const r = resolveDirectoryTree(root);
+    expect(r.errors.some((e) => e.type === "meta-validation")).toBe(true);
+  });
+
+  it("字面常量字段(不含 ${})原样输出", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      files: {
+        x: {
+          pattern: "^x\\.md$",
+          type: "x-file",
+          tag: "constant-tag",
+        },
+      },
+    });
+    writeFixture(root, [{ path: "x.md", content: "---\n---\n" }]);
+    const r = resolveDirectoryTree(root);
+    expect(r.errors).toEqual([]);
+    expect(r.files[0]!.x).toEqual({ type: "x-file", tag: "constant-tag" });
   });
 });

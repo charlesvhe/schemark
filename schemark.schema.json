@@ -33,17 +33,12 @@
     "typeKey": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*$",
-      "description": "kebab-case identifier; surfaces as the auto-injected `type` field for files."
+      "not": { "enum": ["frontmatter", "path"] },
+      "description": "kebab-case identifier; surfaces as the meta-output group name. Must not equal the reserved keywords `frontmatter` or `path`. Must be unique across the resolution path (root → matched directory → matched file)."
     },
-    "namespaceName": {
+    "templateString": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9-]*$",
-      "description": "Mount point in the derived meta tree."
-    },
-    "captureGroupName": {
-      "type": "string",
-      "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$",
-      "description": "Identifier for a JS regex named capture group; must not collide with the auto-injected `type` field."
+      "description": "String containing zero or more `${captureGroupName}` interpolations referring to named capture groups in the rule's own `pattern`. Use `$$` to emit a literal `$`."
     },
     "jsonSchemaFieldDef": {
       "type": "object",
@@ -85,47 +80,71 @@
         "allOf": { "type": "array", "items": { "$ref": "#/$defs/jsonSchemaFieldDef" } }
       }
     },
-    "metaSpec": {
+    "metaFieldObject": {
       "type": "object",
-      "description": "Describes how regex captures from the matched name flow into the derived meta object, with JSON Schema validation.",
-      "additionalProperties": false,
+      "description": "Object form of a meta field: a JSON Schema definition plus a `value` template. After interpolation, the value is type-converted (per `type`/`format`) and validated against the schema.",
+      "required": ["value"],
       "properties": {
-        "namespace": { "$ref": "#/$defs/namespaceName" },
-        "fields": {
-          "type": "object",
-          "description": "Keys are regex capture group names; values are JSON Schema definitions.",
-          "propertyNames": { "$ref": "#/$defs/captureGroupName" },
-          "additionalProperties": { "$ref": "#/$defs/jsonSchemaFieldDef" }
+        "value": { "$ref": "#/$defs/templateString" },
+        "type": {
+          "oneOf": [
+            { "type": "string", "enum": ["string", "integer", "number", "boolean"] },
+            { "type": "array", "items": { "type": "string", "enum": ["string", "integer", "number", "boolean"] } }
+          ],
+          "description": "Capture-group values are always strings before conversion; only scalar types are meaningful here."
         },
-        "required": {
-          "type": "array",
-          "description": "Capture group names that MUST be present and non-empty after matching.",
-          "items": { "$ref": "#/$defs/captureGroupName" },
-          "uniqueItems": true
-        }
-      }
+        "format": { "type": "string" },
+        "enum": { "type": "array" },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" },
+        "minLength": { "type": "integer", "minimum": 0 },
+        "maxLength": { "type": "integer", "minimum": 0 },
+        "pattern": { "type": "string", "format": "regex" },
+        "description": { "type": "string" },
+        "default": {},
+        "const": {},
+        "oneOf": { "type": "array", "items": { "$ref": "#/$defs/jsonSchemaFieldDef" } },
+        "anyOf": { "type": "array", "items": { "$ref": "#/$defs/jsonSchemaFieldDef" } },
+        "allOf": { "type": "array", "items": { "$ref": "#/$defs/jsonSchemaFieldDef" } }
+      },
+      "additionalProperties": true
     },
-    "frontmatterSpec": {
+    "metaFieldValue": {
+      "description": "A meta field value: either a string (literal constant or template containing `${...}`) or an object form with a JSON Schema and `value` template.",
+      "oneOf": [
+        { "$ref": "#/$defs/templateString" },
+        { "$ref": "#/$defs/metaFieldObject" }
+      ]
+    },
+    "frontmatterSchema": {
       "type": "object",
-      "description": "Describes which fields to extract from YAML frontmatter and their JSON Schema validation.",
-      "additionalProperties": false,
+      "description": "JSON Schema (Draft 2020-12 subset) describing the YAML frontmatter object of the matched MD file. `type: \"object\"` is implied and need not be written. Supports `properties`, `required`, `additionalProperties`, etc.",
+      "additionalProperties": true,
       "properties": {
-        "fields": {
+        "properties": {
           "type": "object",
-          "description": "Keys are frontmatter field names; values are JSON Schema definitions.",
           "additionalProperties": { "$ref": "#/$defs/jsonSchemaFieldDef" }
         },
         "required": {
           "type": "array",
-          "description": "Frontmatter field names that MUST be present in the YAML block.",
           "items": { "type": "string" },
           "uniqueItems": true
-        }
+        },
+        "additionalProperties": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "$ref": "#/$defs/jsonSchemaFieldDef" }
+          ]
+        },
+        "description": { "type": "string" },
+        "oneOf": { "type": "array", "items": { "$ref": "#/$defs/jsonSchemaFieldDef" } },
+        "anyOf": { "type": "array", "items": { "$ref": "#/$defs/jsonSchemaFieldDef" } },
+        "allOf": { "type": "array", "items": { "$ref": "#/$defs/jsonSchemaFieldDef" } }
       }
     },
     "directoryRule": {
       "type": "object",
-      "additionalProperties": false,
+      "description": "Reserved keys: `pattern`, `required`, `directories`, `files`. Any other key is treated as a meta field name; its value follows `metaFieldValue`.",
       "required": ["pattern"],
       "properties": {
         "pattern": {
@@ -134,24 +153,29 @@
           "minLength": 1,
           "description": "JS-flavored regex with optional named capture groups; matched against the bare directory name."
         },
-        "meta": { "$ref": "#/$defs/metaSpec" },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, the parent directory MUST contain at least one entry matching this rule's `pattern`."
+        },
         "directories": {
           "type": "object",
-          "description": "Nested directory rules for this directory's children. Inherited if no schemark.json exists in the matched directory.",
+          "description": "Nested directory rules for this directory's children. Inherited if no schemark.json exists in the matched directory; completely overridden (no field-level merge) if one does.",
           "propertyNames": { "$ref": "#/$defs/typeKey" },
           "additionalProperties": { "$ref": "#/$defs/directoryRule" }
         },
         "files": {
           "type": "object",
-          "description": "Nested file rules for this directory's children. Inherited if no schemark.json exists in the matched directory.",
+          "description": "Nested file rules for this directory's children. Inherited if no schemark.json exists in the matched directory; completely overridden (no field-level merge) if one does.",
           "propertyNames": { "$ref": "#/$defs/typeKey" },
           "additionalProperties": { "$ref": "#/$defs/fileRule" }
         }
-      }
+      },
+      "additionalProperties": { "$ref": "#/$defs/metaFieldValue" }
     },
     "fileRule": {
       "type": "object",
-      "additionalProperties": false,
+      "description": "Reserved keys: `pattern`, `required`, `frontmatter`. Any other key is treated as a meta field name; its value follows `metaFieldValue`.",
       "required": ["pattern"],
       "properties": {
         "pattern": {
@@ -160,9 +184,14 @@
           "minLength": 1,
           "description": "JS-flavored regex matched against the bare file name (e.g. meeting-20260415-站会纪要.md)."
         },
-        "frontmatter": { "$ref": "#/$defs/frontmatterSpec" },
-        "meta": { "$ref": "#/$defs/metaSpec" }
-      }
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, the parent directory MUST contain at least one file matching this rule's `pattern`."
+        },
+        "frontmatter": { "$ref": "#/$defs/frontmatterSchema" }
+      },
+      "additionalProperties": { "$ref": "#/$defs/metaFieldValue" }
     }
   }
 }
