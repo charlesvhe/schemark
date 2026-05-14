@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemark.dev/schemark.schema.json",
+  "title": "Schemark Configuration",
+  "description": "Meta-schema for schemark.json files. Each schemark.json describes the directly-owned subdirectories and files, with support for nested definitions that can be overridden by child schemark.json files.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri-reference",
+      "description": "Pointer to this meta-schema, enables IDE assistance."
+    },
+    "strict": {
+      "type": "boolean",
+      "default": true,
+      "description": "When true, any direct child not matched by directories/files is illegal."
+    },
+    "directories": {
+      "type": "object",
+      "description": "Rules for direct child directories of this directory.",
+      "propertyNames": { "$ref": "#/$defs/typeKey" },
+      "additionalProperties": { "$ref": "#/$defs/directoryRule" }
+    },
+    "files": {
+      "type": "object",
+      "description": "Rules for direct child files of this directory.",
+      "propertyNames": { "$ref": "#/$defs/typeKey" },
+      "additionalProperties": { "$ref": "#/$defs/fileRule" }
+    }
+  },
+  "$defs": {
+    "typeKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "kebab-case identifier; surfaces as the auto-injected `type` field for files."
+    },
+    "namespaceName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Mount point in the derived meta tree."
+    },
+    "captureGroupName": {
+      "type": "string",
+      "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$",
+      "description": "Identifier for a JS regex named capture group; must not collide with the auto-injected `type` field."
+    },
+    "jsonSchemaFieldDef": {
+      "type": "object",
+      "description": "Subset of JSON Schema Draft 2020-12 used to describe a single field. Tools MAY accept additional standard JSON Schema keywords beyond those listed; unknown keywords are passed through to the underlying validator.",
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "oneOf": [
+            { "type": "string", "enum": ["string", "integer", "number", "boolean", "array", "object", "null"] },
+            { "type": "array", "items": { "type": "string", "enum": ["string", "integer", "number", "boolean", "array", "object", "null"] } }
+          ]
+        },
+        "format": { "type": "string" },
+        "enum": { "type": "array" },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" },
+        "minLength": { "type": "integer", "minimum": 0 },
+        "maxLength": { "type": "integer", "minimum": 0 },
+        "pattern": { "type": "string", "format": "regex" },
+        "items": { "$ref": "#/$defs/jsonSchemaFieldDef" },
+        "minItems": { "type": "integer", "minimum": 0 },
+        "maxItems": { "type": "integer", "minimum": 0 },
+        "description": { "type": "string" },
+        "default": {},
+        "const": {},
+        "properties": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/jsonSchemaFieldDef" }
+        },
+        "required": { "type": "array", "items": { "type": "string" } },
+        "additionalProperties": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "$ref": "#/$defs/jsonSchemaFieldDef" }
+          ]
+        },
+        "oneOf": { "type": "array", "items": { "$ref": "#/$defs/jsonSchemaFieldDef" } },
+        "anyOf": { "type": "array", "items": { "$ref": "#/$defs/jsonSchemaFieldDef" } },
+        "allOf": { "type": "array", "items": { "$ref": "#/$defs/jsonSchemaFieldDef" } }
+      }
+    },
+    "metaSpec": {
+      "type": "object",
+      "description": "Describes how regex captures from the matched name flow into the derived meta object, with JSON Schema validation.",
+      "additionalProperties": false,
+      "properties": {
+        "namespace": { "$ref": "#/$defs/namespaceName" },
+        "fields": {
+          "type": "object",
+          "description": "Keys are regex capture group names; values are JSON Schema definitions.",
+          "propertyNames": { "$ref": "#/$defs/captureGroupName" },
+          "additionalProperties": { "$ref": "#/$defs/jsonSchemaFieldDef" }
+        },
+        "required": {
+          "type": "array",
+          "description": "Capture group names that MUST be present and non-empty after matching.",
+          "items": { "$ref": "#/$defs/captureGroupName" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "frontmatterSpec": {
+      "type": "object",
+      "description": "Describes which fields to extract from YAML frontmatter and their JSON Schema validation.",
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "type": "object",
+          "description": "Keys are frontmatter field names; values are JSON Schema definitions.",
+          "additionalProperties": { "$ref": "#/$defs/jsonSchemaFieldDef" }
+        },
+        "required": {
+          "type": "array",
+          "description": "Frontmatter field names that MUST be present in the YAML block.",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "directoryRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pattern"],
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "format": "regex",
+          "minLength": 1,
+          "description": "JS-flavored regex with optional named capture groups; matched against the bare directory name."
+        },
+        "meta": { "$ref": "#/$defs/metaSpec" },
+        "directories": {
+          "type": "object",
+          "description": "Nested directory rules for this directory's children. Inherited if no schemark.json exists in the matched directory.",
+          "propertyNames": { "$ref": "#/$defs/typeKey" },
+          "additionalProperties": { "$ref": "#/$defs/directoryRule" }
+        },
+        "files": {
+          "type": "object",
+          "description": "Nested file rules for this directory's children. Inherited if no schemark.json exists in the matched directory.",
+          "propertyNames": { "$ref": "#/$defs/typeKey" },
+          "additionalProperties": { "$ref": "#/$defs/fileRule" }
+        }
+      }
+    },
+    "fileRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pattern"],
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "format": "regex",
+          "minLength": 1,
+          "description": "JS-flavored regex matched against the bare file name (e.g. meeting-20260415-站会纪要.md)."
+        },
+        "frontmatter": { "$ref": "#/$defs/frontmatterSpec" },
+        "meta": { "$ref": "#/$defs/metaSpec" }
+      }
+    }
+  }
+}

@@ -1,0 +1,213 @@
+{
+  "$schema": "../schemark.schema.json",
+  "strict": true,
+  "directories": {
+    "iteration": {
+      "pattern": "^(?<name>(?<start>\\d{8})-(?<end>\\d{8})-.+)$",
+      "meta": {
+        "namespace": "sprint",
+        "fields": {
+          "start": {
+            "type": "string",
+            "format": "date"
+          },
+          "end": {
+            "type": "string",
+            "format": "date"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "name"
+        ]
+      },
+      "files": {
+        "overview": {
+          "pattern": "^overview\\.md$",
+          "frontmatter": {
+            "fields": {
+              "goals": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              },
+              "owner": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "planned",
+                  "in-progress",
+                  "completed",
+                  "cancelled"
+                ]
+              }
+            },
+            "required": [
+              "goals",
+              "owner",
+              "status"
+            ]
+          }
+        },
+        "task": {
+          "pattern": "^task-(?<id>T\\d{4})-(?<title>.+)\\.md$",
+          "frontmatter": {
+            "fields": {
+              "assignee": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "todo",
+                  "doing",
+                  "review",
+                  "done",
+                  "blocked"
+                ]
+              },
+              "priority": {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              "estimated-hours": {
+                "type": "number",
+                "minimum": 0
+              },
+              "actual-hours": {
+                "type": "number",
+                "minimum": 0
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "depends-on": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^T\\d{4}$"
+                }
+              }
+            },
+            "required": [
+              "assignee",
+              "status",
+              "priority"
+            ]
+          },
+          "meta": {
+            "namespace": "task",
+            "fields": {
+              "id": {
+                "type": "string",
+                "pattern": "^T\\d{4}$"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ]
+          }
+        },
+        "bug": {
+          "pattern": "^bug-(?<id>B\\d{4})-(?<title>.+)\\.md$",
+          "frontmatter": {
+            "fields": {
+              "reporter": {
+                "type": "string"
+              },
+              "assignee": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "confirmed",
+                  "fixing",
+                  "verifying",
+                  "closed",
+                  "wontfix"
+                ]
+              },
+              "found-at": {
+                "type": "string",
+                "format": "date"
+              },
+              "fixed-at": {
+                "type": "string",
+                "format": "date"
+              },
+              "affected-versions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "reporter",
+              "severity",
+              "status",
+              "found-at"
+            ]
+          },
+          "meta": {
+            "namespace": "bug",
+            "fields": {
+              "id": {
+                "type": "string",
+                "pattern": "^B\\d{4}$"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "files": {
+    "overview": {
+      "pattern": "^overview\\.md$"
+    }
+  }
+}

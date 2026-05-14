@@ -1,0 +1,8 @@
+.claude
+
+cli/package-lock.json
+cli/node_modules
+cli/dist
+cli/bin
+cli/schemark.schema.json
+
