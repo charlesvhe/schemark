@@ -311,26 +311,34 @@ function handleFile(
     fileMeta = deriveMetaFields(fileRule, false, matched.captures, rel);
   } catch (e) {
     pushDeriveError(e, rel, result);
+    result.files.push({ path: rel, frontmatter: {}, schemark: deriveErrorMessage(e) });
     return matched.typeKey;
   }
 
   if (matched.typeKey in ctx.accumulatedGroups) {
-    result.errors.push({
-      path: rel,
-      type: "duplicate-typekey",
-      message: `运行时 typeKey 冲突: "${matched.typeKey}" 在解析路径上重复`,
-    });
+    const msg = `运行时 typeKey 冲突: "${matched.typeKey}" 在解析路径上重复`;
+    result.errors.push({ path: rel, type: "duplicate-typekey", message: msg });
+    result.files.push({ path: rel, frontmatter: {}, schemark: msg });
     return matched.typeKey;
   }
 
   const fm = extractFrontmatter(fullPath, fileRule, rel, result);
-  if (fm === undefined) return matched.typeKey;
+  if (fm === undefined) {
+    const fmErr = result.errors.filter((e) => e.path === rel).pop();
+    result.files.push({ path: rel, frontmatter: {}, schemark: fmErr?.message ?? "frontmatter 校验失败" });
+    return matched.typeKey;
+  }
 
   const out: ResolvedFile = { path: rel, frontmatter: fm };
-  for (const [k, v] of Object.entries(ctx.accumulatedGroups)) {
-    out[k] = v;
+  for (const v of Object.values(ctx.accumulatedGroups)) {
+    const group = v as Record<string, unknown>;
+    for (const [field, val] of Object.entries(group)) {
+      out[field] = val;
+    }
   }
-  out[matched.typeKey] = fileMeta;
+  for (const [field, val] of Object.entries(fileMeta)) {
+    out[field] = val;
+  }
   result.files.push(out);
   return matched.typeKey;
 }
@@ -406,6 +414,13 @@ function pushDeriveError(e: unknown, rel: string, result: ResolveResult): void {
     return;
   }
   result.errors.push({ path: rel, type: "conversion", message: (e as Error).message });
+}
+
+function deriveErrorMessage(e: unknown): string {
+  if (e instanceof TemplateError) return `${e.field}: ${e.message}`;
+  if (e instanceof ConversionError) return `${e.field}: ${e.message}`;
+  if (e instanceof MetaValidationError) return `${e.field}: ${e.message}`;
+  return (e as Error).message;
 }
 
 function extractFrontmatter(

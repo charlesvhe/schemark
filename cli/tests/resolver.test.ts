@@ -29,13 +29,11 @@ describe("resolveDirectoryTree", () => {
     expect(r.files).toHaveLength(1);
     const f = r.files[0]!;
     expect(f.path).toBe("20260401-20260430-项目启动/meeting-20260415-站会纪要.md");
-    expect(f.milestone).toEqual({
-      type: "milestone",
-      start: "2026-04-01",
-      end: "2026-04-30",
-      name: "20260401-项目启动",
-    });
-    expect(f.meeting).toEqual({ date: "2026-04-15", name: "meeting-站会纪要" });
+    expect(f.type).toBe("milestone");
+    expect(f.start).toBe("2026-04-01");
+    expect(f.end).toBe("2026-04-30");
+    expect(f.name).toBe("meeting-站会纪要");
+    expect(f.date).toBe("2026-04-15");
     expect(f.frontmatter).toEqual({ attendees: ["张三", "李四"], tags: ["daily"], duration: 30 });
     expect((f as Record<string, unknown>).meta).toBeUndefined();
   });
@@ -64,7 +62,7 @@ describe("resolveDirectoryTree", () => {
 
     const r = resolveDirectoryTree(root);
     expect(r.files).toHaveLength(1);
-    expect(r.files[0]!.retrospective).toEqual({ date: "2026-04-30" });
+    expect(r.files[0]!.date).toBe("2026-04-30");
     expect(r.errors.some((e) => e.type === "unmatched-file")).toBe(true);
   });
 
@@ -79,7 +77,7 @@ describe("resolveDirectoryTree", () => {
 
     const r = resolveDirectoryTree(root);
     expect(r.errors).toEqual([]);
-    expect(r.files[0]!.design).toEqual({ name: "用户登录" });
+    expect(r.files[0]!.name).toBe("用户登录");
   });
 
   it("文件名同时命中多条规则时报歧义错误", () => {
@@ -260,7 +258,9 @@ describe("resolveDirectoryTree", () => {
     writeFixture(root, [{ path: "x.md", content: "---\n---\n" }]);
     const r = resolveDirectoryTree(root);
     expect(r.errors.some((e) => e.type === "template-undefined-capture")).toBe(true);
-    expect(r.files).toHaveLength(0);
+    expect(r.files).toHaveLength(1);
+    expect(r.files[0]!.path).toBe("x.md");
+    expect(r.files[0]!.schemark).toContain("missing");
   });
 
   it("对象形式 enum 校验失败时报 meta-validation", () => {
@@ -292,6 +292,7 @@ describe("resolveDirectoryTree", () => {
     writeFixture(root, [{ path: "x.md", content: "---\n---\n" }]);
     const r = resolveDirectoryTree(root);
     expect(r.errors).toEqual([]);
-    expect(r.files[0]!.x).toEqual({ type: "x-file", tag: "constant-tag" });
+    expect(r.files[0]!.type).toBe("x-file");
+    expect(r.files[0]!.tag).toBe("constant-tag");
   });
 });

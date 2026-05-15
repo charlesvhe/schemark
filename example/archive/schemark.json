@@ -1,5 +1,5 @@
 {
-  "$schema": "../schemark.schema.json",
+  "$schema": "../../schemark.schema.json",
   "strict": true,
   "directories": {
     "sprint": {

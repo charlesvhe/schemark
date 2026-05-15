@@ -29,13 +29,11 @@ describe("runMeta", () => {
     expect(r.exitCode).toBe(0);
     expect(r.files).toHaveLength(1);
     const f = r.files[0]!;
-    expect(f.milestone).toEqual({
-      type: "milestone",
-      start: "2026-04-01",
-      end: "2026-04-30",
-      name: "20260401-项目启动",
-    });
-    expect(f.meeting).toEqual({ date: "2026-04-15", name: "meeting-站会纪要" });
+    expect(f.type).toBe("milestone");
+    expect(f.start).toBe("2026-04-01");
+    expect(f.end).toBe("2026-04-30");
+    expect(f.name).toBe("meeting-站会纪要");
+    expect(f.date).toBe("2026-04-15");
     expect(f.frontmatter).toEqual({ attendees: ["张三", "李四"], tags: ["daily"], duration: 30 });
     expect((f as Record<string, unknown>).meta).toBeUndefined();
   });
@@ -69,7 +67,9 @@ describe("runMeta", () => {
     writeFixture(root, [{ path: "x-abc.md", content: "---\n---\n" }]);
     const r = runMeta(root);
     expect(r.exitCode).toBe(0);
-    expect(r.files).toHaveLength(0);
+    expect(r.files).toHaveLength(1);
+    expect(r.files[0]!.path).toBe("x-abc.md");
+    expect(r.files[0]!.schemark).toContain("integer");
     expect(r.stderr).toContain("conversion");
   });
 

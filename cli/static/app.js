@@ -126,9 +126,13 @@
       function filtersFor(col) {
         var seen = {};
         var arr = [];
+        var hasBlank = false;
         for (var i = 0; i < rows.value.length; i++) {
           var v = rows.value[i][col];
-          if (v === undefined || v === null || v === '') continue;
+          if (v === undefined || v === null || v === '') {
+            hasBlank = true;
+            continue;
+          }
           var s = String(v);
           if (!seen[s]) {
             seen[s] = true;
@@ -136,6 +140,9 @@
           }
         }
         arr.sort(function (a, b) { return a.text < b.text ? -1 : a.text > b.text ? 1 : 0; });
+        if (hasBlank) {
+          arr.unshift({ text: '(空白)', value: '' });
+        }
         return arr;
       }
 

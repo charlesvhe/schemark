@@ -1,6 +1,6 @@
 {
   "name": "schemark",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "用 JSON Schema 约束 Markdown 文档仓库的目录结构、文件命名与 Frontmatter",
   "type": "module",
   "bin": {

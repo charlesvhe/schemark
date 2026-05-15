@@ -152,16 +152,11 @@ duration: 30
 ```json
 {
   "path": "docs/20260401-20260430-项目启动/meeting-20260415-站会纪要.md",
-  "milestone": {
-    "type": "milestone",
-    "start": "2026-04-01",
-    "end": "2026-04-30",
-    "name": "20260401-项目启动"
-  },
-  "meeting": {
-    "date": "2026-04-15",
-    "name": "meeting-站会纪要"
-  },
+  "type": "milestone",
+  "start": "2026-04-01",
+  "end": "2026-04-30",
+  "date": "2026-04-15",
+  "name": "meeting-站会纪要",
   "frontmatter": {
     "attendees": ["张三", "李四"],
     "tags": ["daily"],
@@ -172,8 +167,9 @@ duration: 30
 
 **关键点:**
 
-- 命中的每条规则贡献一个以 **typeKey** 命名的对象(`milestone` / `meeting`)
-- `frontmatter` 是固定保留键,与各 typeKey 平级
+- 命中的每条规则把其 meta 字段**直接拉平到顶层**,不再按 typeKey 分组
+- 父子规则字段名相同时,**深层(子级)规则覆盖浅层(父级)规则**(此处 `meeting.name` 覆盖 `milestone.name`,故 `name = "meeting-站会纪要"`)
+- `frontmatter` 是固定保留键,与拉平后的字段平级,其内部结构**不**参与拉平
 - 字段值由 `${...}` 模板插值得到,然后按字段声明做类型转换与校验
 
 ---
@@ -280,10 +276,12 @@ duration: 30
 
 ### 3. 派生 meta 输出结构
 
-输出对象顶层除 `path` 外:
+输出对象顶层固定包含 `path`(文件相对路径)和 `frontmatter`(YAML 解析结果),其余字段由命中的规则**直接拉平到顶层**:
 
-- 每条命中的规则贡献**一个以 typeKey 命名的对象**,内含该规则上声明的所有 meta 字段
-- `frontmatter` 是固定保留键,平级输出 YAML 解析结果
+- 从根到文件,解析路径上命中的每条规则(目录规则 + 文件规则)的 meta 字段**全部合并到同一层**
+- 父子规则字段名相同时,**深层(子级)规则静默覆盖浅层(父级)规则**
+- `frontmatter` 不参与拉平,始终作为独立对象保留
+- 若 meta 字段的值本身是对象(形式 B),该对象内部**不**递归拉平,只拉平一层
 
 不再使用 `namespace`,不再自动注入 `type`。如果你想让消费者通过 `type` 字段判断节点类型,自己在规则里写 `"type": "<typeKey>"` 即可。
 
@@ -383,14 +381,21 @@ docs/
 
 ```json
 {
-  "milestone": { "type": "milestone", "start": "2026-04-01", "end": "2026-04-30", "name": "项目启动" },
-  "sprint":    { "type": "sprint", "number": "001" },
-  "task":      { "id": "T001", "title": "登录页面" },
+  "type": "sprint",
+  "start": "2026-04-01",
+  "end": "2026-04-30",
+  "name": "项目启动",
+  "number": "001",
+  "id": "T001",
+  "title": "登录页面",
   "frontmatter": { "assignee": "张三", "status": "doing", "priority": 2 }
 }
 ```
 
-注意 `task` 规则没有写 `"type": "task"`,因此派生输出里也没有 `type` 字段——是否输出 `type` 完全由配置决定。
+注意:
+- `milestone` 和 `sprint` 都声明了 `type`,深层的 `sprint.type = "sprint"` 覆盖了浅层的 `milestone.type = "milestone"`
+- `task` 规则没有写 `"type": "task"`,因此派生输出里也没有额外的 `type` 覆盖——最终 `type` 来自 `sprint`
+- `frontmatter` 不参与拉平,始终作为独立对象保留
 
 ---
 

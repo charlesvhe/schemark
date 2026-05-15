@@ -28,3 +28,25 @@ When encountering "Error writing file" in Claude Code, it's typically caused by 
 **Violation test**: If a changed line cannot be traced to the user's request, revert it.
 
 ---
+
+## CLI 本地编译与安装
+
+项目 CLI 位于 `cli/` 目录,基于 Node.js (>=18) + tsup 构建。
+
+```bash
+cd cli
+npm run build      # tsup 编译,输出到 dist/
+npm link           # 全局安装 schemark 命令
+```
+
+安装后可用命令:
+
+```
+schemark valid [dir]          # 校验目录树是否符合 schemark.json
+schemark meta [dir]           # 派生 meta JSON(出错文件输出 path + schemark 错误信息)
+schemark web [dir]            # 启动本地 Web 查看器
+```
+
+测试: `npm run test:run` (vitest)
+
+---

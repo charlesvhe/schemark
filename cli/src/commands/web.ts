@@ -163,7 +163,10 @@ export function runWeb(dir: string, options: WebOptions): Promise<{ stop: () => 
     });
 
     server.listen(port, "127.0.0.1", () => {
-      process.stdout.write(`Schemark web on http://localhost:${port}\n`);
+      const url = `http://localhost:${port}`;
+      process.stdout.write(`Schemark web on ${url}\n`);
+      const { cmd, args } = getOpenCommand();
+      spawn(cmd, args(url), { stdio: "ignore", detached: true }).unref();
       resolvePromise({ stop: () => server.close() });
     });
   });
