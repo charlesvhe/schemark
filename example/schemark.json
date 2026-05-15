@@ -9,9 +9,10 @@
       "end": { "type": "string", "format": "date", "value": "${end}" },
       "name": "${name}",
       "files": {
-        "overview": {
-          "pattern": "^overview\\.md$",
+        "readme": {
+          "pattern": "^README\\.md$",
           "required": true,
+          "type": "sprint-readme",
           "frontmatter": {
             "properties": {
               "goals": {
@@ -82,8 +83,9 @@
     }
   },
   "files": {
-    "overview": {
-      "pattern": "^overview\\.md$"
+    "readme": {
+      "pattern": "^README\\.md$",
+      "type": "root-readme"
     }
   }
 }
