@@ -1,13 +1,13 @@
 ---
-assignee: 王浩
-status: 进行中
-priority: 高
-hours: 40
-tags:
+负责人: 王浩
+状态: 进行中
+预估工时: 40
+已投入工时: 24
+标签:
   - 后端
   - 订单
-depends-on:
-  - T0006
+关联内容:
+  - pm/epic/E02-支付与订单/F01-订单管理/README.md
 ---
 
 # 订单创建与查询 API

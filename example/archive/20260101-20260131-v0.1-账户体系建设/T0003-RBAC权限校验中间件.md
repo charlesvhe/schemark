@@ -1,14 +1,14 @@
 ---
-assignee: 陈思雨
-status: 完成
-priority: 中
-hours: 24
-tags:
+负责人: 陈思雨
+状态: 完成
+预估工时: 24
+已投入工时: 26
+标签:
   - 后端
   - 权限
-depends-on:
-  - T0001
-  - T0002
+关联内容:
+  - pm/epic/E01-账户体系/F02-权限管理/README.md
+  - pm/epic/E01-账户体系/F01-用户管理/US01-注册与登录.md
 ---
 
 # 实现 RBAC 权限校验中间件

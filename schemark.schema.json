@@ -11,6 +11,11 @@
       "format": "uri-reference",
       "description": "Pointer to this meta-schema, enables IDE assistance."
     },
+    "$defs": {
+      "type": "object",
+      "description": "Local reusable rule definitions. Reference them with { \"$ref\": \"#/$defs/<key>\" }.",
+      "additionalProperties": true
+    },
     "strict": {
       "type": "boolean",
       "default": true,
@@ -110,9 +115,9 @@
       "additionalProperties": true
     },
     "metaFieldValue": {
-      "description": "A meta field value: either a string (literal constant or template containing `${...}`) or an object form with a JSON Schema and `value` template.",
+      "description": "A meta field value: a JSON primitive (string, number, boolean, null) used as a constant, or an object form with a JSON Schema and `value` template.",
       "oneOf": [
-        { "$ref": "#/$defs/templateString" },
+        { "type": ["string", "number", "boolean", "null"] },
         { "$ref": "#/$defs/metaFieldObject" }
       ]
     },
@@ -169,7 +174,8 @@
           "description": "Nested file rules for this directory's children. Inherited if no schemark.json exists in the matched directory; completely overridden (no field-level merge) if one does.",
           "propertyNames": { "$ref": "#/$defs/typeKey" },
           "additionalProperties": { "$ref": "#/$defs/fileRule" }
-        }
+        },
+        "$ref": { "type": "string", "description": "Reference to a local $defs entry, e.g. \"#/$defs/myRule\"." }
       },
       "additionalProperties": { "$ref": "#/$defs/metaFieldValue" }
     },
@@ -189,7 +195,8 @@
           "default": false,
           "description": "When true, the parent directory MUST contain at least one file matching this rule's `pattern`."
         },
-        "frontmatter": { "$ref": "#/$defs/frontmatterSchema" }
+        "frontmatter": { "$ref": "#/$defs/frontmatterSchema" },
+        "$ref": { "type": "string", "description": "Reference to a local $defs entry, e.g. \"#/$defs/myRule\"." }
       },
       "additionalProperties": { "$ref": "#/$defs/metaFieldValue" }
     }

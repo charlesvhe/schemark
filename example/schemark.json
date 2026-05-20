@@ -1,94 +1,87 @@
 {
-  "$schema": "../schemark.schema.json",
   "strict": true,
-  "directories": {
-    "sprint": {
-      "pattern": "^(?<name>(?<start>\\d{8})-(?<end>\\d{8})-.+)$",
-      "sprint": "${name}",
-      "sprint_start": { "type": "string", "format": "date", "value": "${start}" },
-      "sprint_end": { "type": "string", "format": "date", "value": "${end}" },
+  "$defs": {
+    "$comment": "定义可复用规则",
+    "sprintRule": {
+      "pattern": "^(?<name>(?<start>\\d{8})-(?<end>\\d{8})-(?<version>[\\w\\.]+)-.+)$",
+      "迭代名称": "${name}",
+      "迭代计划开始": { "type": "string", "format": "date", "value": "${start}" },
+      "迭代计划结束": { "type": "string", "format": "date", "value": "${end}" },
+      "迭代版本": { "type": "string", "value": "${version}" },
       "files": {
         "readme": {
           "pattern": "^README\\.md$",
           "required": true,
-          "type": "sprint_readme",
+          "type": "迭代说明",
           "frontmatter": {
             "properties": {
-              "goals": {
-                "type": "array",
-                "items": { "type": "string" },
-                "minItems": 1
-              },
-              "assignee": { "type": "string" },
-              "status": {
-                "type": "string",
-                "enum": ["进行中", "完成", "取消"]
-              }
+              "迭代场景": { "type": "string", "enum": ["缺陷修复", "简单需求", "标准需求", "复杂需求"] },
+              "迭代负责人": { "type": "string" },
+              "产品负责人": { "type": "string" },
+              "测试负责人": { "type": "string" },
+              "实际结束时间": { "type": "string", "format": "date" }
             },
-            "required": ["goals", "owner", "status"]
+            "required": ["迭代负责人", "产品负责人", "测试负责人", "实际结束时间"]
           }
         },
         "task": {
           "pattern": "^(?<id>T\\d{4})-(?<title>.+)\\.md$",
-          "type": "task",
+          "type": "任务",
           "id": { "type": "string", "pattern": "^T\\d{4}$", "value": "${id}" },
-          "title": "${title}",
+          "标题": "${title}",
           "frontmatter": {
             "properties": {
-              "assignee": { "type": "string" },
-              "status": {
-                "type": "string",
-                "enum": ["进行中", "完成", "取消"]
-              },
-              "priority": { "type": "string", "enum": ["高", "中", "低"] },
-              "hours": { "type": "number", "minimum": 0 },
-              "tags": { "type": "array", "items": { "type": "string" } },
-              "depends-on": {
-                "type": "array",
-                "items": { "type": "string", "pattern": "^T\\d{4}$" }
+              "负责人": { "type": "string" },
+              "预估工时": { "type": "number", "minimum": 0 },
+              "已投入工时": { "type": "number", "minimum": 0 },
+              "标签": { "type": "array", "items": { "type": "string" } },
+              "状态": { "type": "string", "enum": ["进行中", "完成", "取消"] },
+              "关联内容": { "type": "array", "items": { "type": "string" }, 
+                "$comment": "PRD或OpenSpec等相关内容的相对路径",
+                "examples": [
+                  "pm/epic/E01-admin-management/F01-film-management/README.md",
+                  "pm/epic/E01-admin-management/F01-film-management/US01-film-list-query.md",
+                  "openspec/changes/film-management"
+                ]
               }
             },
-            "required": ["assignee", "status", "priority"]
+            "required": ["负责人", "预估工时", "已投入工时", "状态"]
           }
         },
         "bug": {
           "pattern": "^(?<id>B\\d{4})-(?<title>.+)\\.md$",
-          "type": "bug",
+          "type": "缺陷",
           "id": { "type": "string", "pattern": "^B\\d{4}$", "value": "${id}" },
-          "title": "${title}",
+          "标题": "${title}",
           "frontmatter": {
             "properties": {
               "reporter": { "type": "string" },
               "assignee": { "type": "string" },
-              "critical": {
-                "type": "string",
-                "enum": ["高", "中", "低", "阻塞"]
-              },
-              "status": {
-                "type": "string",
-                "enum": ["进行中", "完成", "取消"]
-              },
+              "critical": { "type": "string", "enum": ["高", "中", "低", "阻塞"] },
+              "status": { "type": "string", "enum": ["进行中", "完成", "取消"] },
               "fixed-at": { "type": "string", "format": "date" },
               "tags": { "type": "array", "items": { "type": "string" } },
-              "ref-task": {
-                "type": "array",
-                "items": { "type": "string", "pattern": "^T\\d{4}$" }
-              }
+              "ref-task": { "type": "array", "items": { "type": "string", "pattern": "^T\\d{4}$" } }
             },
             "required": ["reporter", "critical", "status"]
           }
         }
       }
-    },
+    }
+  },
+  "directories": {
+    "sprint": { "已归档": false, "$ref": "#/$defs/sprintRule" },
     "archive": {
       "pattern": "^archive$",
-      "type": "archive"
+      "directories": {
+        "sprint": { "已归档": true, "$ref": "#/$defs/sprintRule" }
+      }
     }
   },
   "files": {
     "readme": {
       "pattern": "^README\\.md$",
-      "type": "root_readme"
+      "type": "整体说明"
     }
   }
 }

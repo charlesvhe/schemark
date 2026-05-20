@@ -295,4 +295,70 @@ describe("resolveDirectoryTree", () => {
     expect(r.files[0]!.type).toBe("x-file");
     expect(r.files[0]!.tag).toBe("constant-tag");
   });
+
+  it("$ref 解引用：sprint 规则复用", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      $defs: {
+        sprintRule: {
+          pattern: "^(?<name>sprint-.+)$",
+          "sprint-name": "${name}",
+          archived: "false",
+          files: {
+            task: {
+              pattern: "^(?<id>T\\d+)-(?<title>.+)\\.md$",
+              type: "task",
+              id: "${id}",
+            },
+          },
+        },
+      },
+      directories: {
+        current: { $ref: "#/$defs/sprintRule" },
+        archive: {
+          pattern: "^archive$",
+          directories: {
+            sprint: { $ref: "#/$defs/sprintRule", archived: "true" },
+          },
+        },
+      },
+    });
+    writeFixture(root, [
+      { path: "sprint-01/T0001-登录.md", content: "---\n---\n" },
+      { path: "archive/sprint-02/T0002-注册.md", content: "---\n---\n" },
+    ]);
+    const r = resolveDirectoryTree(root);
+    expect(r.errors).toEqual([]);
+    expect(r.files).toHaveLength(2);
+    const byName = Object.fromEntries(r.files.map((f) => [f["sprint-name"], f]));
+    expect(byName["sprint-01"]!.archived).toBe("false");
+    expect(byName["sprint-02"]!.archived).toBe("true");
+    expect(r.files.every((f) => f.type === "task")).toBe(true);
+  });
+
+  it("$ref 指向不存在的 $defs 键时报 config-error", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      directories: {
+        sprint: { $ref: "#/$defs/nonExistent" },
+      },
+    });
+    const r = resolveDirectoryTree(root);
+    expect(r.errors.some((e) => e.type === "config-error")).toBe(true);
+  });
+
+  it("$ref 循环引用时报 config-error", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      $defs: {
+        a: { $ref: "#/$defs/b" },
+        b: { $ref: "#/$defs/a" },
+      },
+      directories: {
+        sprint: { $ref: "#/$defs/a" },
+      },
+    });
+    const r = resolveDirectoryTree(root);
+    expect(r.errors.some((e) => e.type === "config-error")).toBe(true);
+  });
 });

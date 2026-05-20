@@ -380,6 +380,9 @@ function computeMetaField(
   if (typeof value === "string") {
     return renderTemplate(field, value, captures);
   }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
   const obj = value as MetaFieldObject;
   const { value: tpl, ...schemaPart } = obj;
   const rendered = renderTemplate(field, tpl, captures);

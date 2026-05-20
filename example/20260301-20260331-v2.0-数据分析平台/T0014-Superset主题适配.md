@@ -1,7 +1,8 @@
 ---
-assignee: 刘洋
-status: 取消
-priority: 低
+负责人: 刘洋
+状态: 取消
+预估工时: 8
+已投入工时: 0
 ---
 
 # Superset 主题适配
