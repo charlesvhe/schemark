@@ -1,10 +1,8 @@
 # Schemark
 
-**用 JSON Schema 约束 Markdown 文档仓库的目录结构、文件命名与 Frontmatter,并从路径、文件名中通过模板插值派生元信息。**
+**用 JSON Schema 约束 Markdown 文档仓库的目录结构、文件命名、Frontmatter 与正文章节,并从路径、文件名中通过模板插值派生元信息。**
 
 > 命名由来:**Sche**ma + Mark**down** = **Schemark**。
-
-> ⚠️ **Schema v2 重写中**:本文档对应的 `schemark.schema.json` 已升级为 v2(模板插值、删除 namespace、frontmatter 改用标准 JSON Schema)。`cli/` 下的实现仍按 v1 工作,代码迁移作为后续任务跟进。
 
 ---
 
@@ -181,6 +179,7 @@ duration: 30
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `$schema` | string | 否 | 指向元 schema,启用 IDE 补全 |
+| `$defs` | object | 否 | 本地可复用规则定义,通过 `$ref` 引用 |
 | `strict` | boolean | 否(默认 `true`) | 是否禁止未声明的子条目 |
 | `directories` | object | 否 | 子目录规则集合,key 为 typeKey(kebab-case) |
 | `files` | object | 否 | 子文件规则集合,key 为 typeKey(kebab-case) |
@@ -196,6 +195,7 @@ duration: 30
 | `directories` | 仅 dir | object | 否 | 嵌套预定义子目录规则;子目录有自己的 `schemark.json` 时被完全覆盖 |
 | `files` | 仅 dir | object | 否 | 嵌套预定义子文件规则;同上 |
 | `frontmatter` | 仅 file | object | 否 | 标准 JSON Schema(`type: "object"` 隐含),约束 MD 的 YAML 块 |
+| `body` | 仅 file | object | 否 | 正文章节模板,key 为 ATX 标题(如 `"## 重现步骤"`),value 为骨架文本;校验时要求声明的章节标题必须出现在文件中 |
 
 ### typeKey
 
@@ -248,6 +248,56 @@ duration: 30
 ```
 
 支持的 JSON Schema 关键字包括但不限于:`properties` / `required` / `additionalProperties` / `oneOf` / `anyOf` / `allOf` / `description`,以及标准 JSON Schema Draft 2020-12 的全部其它关键字。其它标准 JSON Schema 关键字工具应原样转交给底层校验器,不做特殊处理。
+
+### `body` 字段
+
+`body` 声明 Markdown 文件正文中**必须出现的章节标题**。key 为完整的 ATX 标题(含 `#` 前缀),value 为骨架模板文本(仅供人类参考或未来 `init` 工具使用,校验时不强制)。
+
+```json
+"body": {
+  "## 重现步骤": "[操作步骤]\n[现象]\n[期待结果]\n",
+  "## 修复细节": "<!-- 修复细节描述 -->\n"
+}
+```
+
+**校验规则:**
+
+- 仅检查声明的章节标题是否存在于文件正文中
+- 标题层级严格匹配:`"## X"` 只命中二级标题,`"### X"` 只命中三级标题
+- 不限制章节顺序,允许文件包含未声明的额外章节
+- value(模板内容)不参与校验,不写入 meta JSON
+- fenced code block 内的 `#` 行不计入章节
+
+### `$defs` 与 `$ref`
+
+`schemark.json` 支持本地定义复用,避免重复书写相同的规则:
+
+```json
+{
+  "$defs": {
+    "sprintRule": {
+      "pattern": "^(?<start>\\d{8})-(?<end>\\d{8})-(?<version>[\\w\\.]+)-.+$",
+      "files": { ... }
+    }
+  },
+  "directories": {
+    "sprint": { "$ref": "#/$defs/sprintRule" },
+    "archive": {
+      "pattern": "^archive$",
+      "directories": {
+        "sprint": { "已归档": true, "$ref": "#/$defs/sprintRule" }
+      }
+    }
+  }
+}
+```
+
+**规则:**
+
+- `$defs` 放在 `schemark.json` 顶层,key 为自定义名称,value 为规则对象
+- 通过 `{ "$ref": "#/$defs/<key>" }` 引用;引用对象上的其它字段会与被引用定义**浅合并**(引用侧覆盖被引用侧)
+- 仅支持本地引用(`#/$defs/...`),不支持跨文件
+- 不允许循环引用
 
 ---
 
@@ -309,6 +359,14 @@ duration: 30
 ### 7. 完全覆盖
 
 子目录的 `schemark.json` 完全覆盖父级嵌套预定义,不做字段级合并。详见前文"逐层覆盖规则"。
+
+### 8. `body` 章节校验
+
+- 仅检查声明的章节标题是否存在于文件正文中,不校验章节内容
+- 标题层级严格匹配:`"## X"` 只命中二级标题,`"### X"` 只命中三级标题
+- 不限制章节顺序,允许文件包含未声明的额外章节
+- fenced code block(`` ``` `` 或 `~~~`)内的 `#` 行不计入章节
+- ATX 关闭符(`## 标题 ##`)与 `## 标题` 等价
 
 ---
 
