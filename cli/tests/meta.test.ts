@@ -106,4 +106,22 @@ describe("runMeta", () => {
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("missing-required-rule");
   });
+
+  it("body 缺章节视为 fatal,退出码 1 并写 schemark 字段", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      files: {
+        bug: {
+          pattern: "^B\\d{4}-.+\\.md$",
+          body: { "## 重现步骤": "", "## 修复细节": "" },
+        },
+      },
+    });
+    writeFixture(root, [{ path: "B0001-x.md", content: "---\n---\n\n## 重现步骤\n" }]);
+    const r = runMeta(root);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("missing-required-section");
+    expect(r.files).toHaveLength(1);
+    expect(r.files[0]!.schemark).toContain("## 修复细节");
+  });
 });

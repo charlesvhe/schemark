@@ -181,7 +181,7 @@
     },
     "fileRule": {
       "type": "object",
-      "description": "Reserved keys: `pattern`, `required`, `frontmatter`. Any other key is treated as a meta field name; its value follows `metaFieldValue`.",
+      "description": "Reserved keys: `pattern`, `required`, `frontmatter`, `body`. Any other key is treated as a meta field name; its value follows `metaFieldValue`.",
       "required": ["pattern"],
       "properties": {
         "pattern": {
@@ -196,6 +196,12 @@
           "description": "When true, the parent directory MUST contain at least one file matching this rule's `pattern`."
         },
         "frontmatter": { "$ref": "#/$defs/frontmatterSchema" },
+        "body": {
+          "type": "object",
+          "description": "Section templates of the matched MD file's body. Each key is the literal Markdown ATX heading (e.g. \"## 重现步骤\"); validation requires every declared heading appears in the file with the same level. The value is a free-text scaffold for humans / future init tooling and is not enforced.",
+          "propertyNames": { "pattern": "^#{1,6} \\S.*$" },
+          "additionalProperties": { "type": "string" }
+        },
         "$ref": { "type": "string", "description": "Reference to a local $defs entry, e.g. \"#/$defs/myRule\"." }
       },
       "additionalProperties": { "$ref": "#/$defs/metaFieldValue" }

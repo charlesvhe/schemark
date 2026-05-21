@@ -361,4 +361,90 @@ describe("resolveDirectoryTree", () => {
     const r = resolveDirectoryTree(root);
     expect(r.errors.some((e) => e.type === "config-error")).toBe(true);
   });
+
+  describe("body 章节校验", () => {
+    const bodyConfig = {
+      strict: true,
+      files: {
+        bug: {
+          pattern: "^B\\d{4}-.+\\.md$",
+          body: {
+            "## 重现步骤": "[操作步骤]\n",
+            "## 修复细节": "<!-- 修复细节描述 -->\n",
+          },
+        },
+      },
+    };
+
+    it("文件包含全部声明章节(顺序无关)→ 通过", () => {
+      writeJson(root, "schemark.json", bodyConfig);
+      writeFixture(root, [
+        {
+          path: "B0001-x.md",
+          content:
+            "---\n---\n\n# 标题\n\n## 修复细节\n\n内容\n\n## 重现步骤\n\n步骤\n\n## 额外章节\n",
+        },
+      ]);
+      const r = resolveDirectoryTree(root);
+      expect(r.errors).toEqual([]);
+    });
+
+    it("缺章节 → missing-required-section 且消息含章节名", () => {
+      writeJson(root, "schemark.json", bodyConfig);
+      writeFixture(root, [
+        { path: "B0001-x.md", content: "---\n---\n\n## 重现步骤\n" },
+      ]);
+      const r = resolveDirectoryTree(root);
+      const missing = r.errors.filter((e) => e.type === "missing-required-section");
+      expect(missing).toHaveLength(1);
+      expect(missing[0]!.message).toContain("## 修复细节");
+    });
+
+    it("层级不匹配视为缺失(声明 ## X,文件写 ### X)", () => {
+      writeJson(root, "schemark.json", {
+        strict: true,
+        files: { bug: { pattern: "^B\\d{4}-.+\\.md$", body: { "## X": "" } } },
+      });
+      writeFixture(root, [{ path: "B0001-x.md", content: "---\n---\n\n### X\n" }]);
+      const r = resolveDirectoryTree(root);
+      expect(r.errors.some((e) => e.type === "missing-required-section")).toBe(true);
+    });
+
+    it("fenced code block 内的 ## 不算章节", () => {
+      writeJson(root, "schemark.json", {
+        strict: true,
+        files: { bug: { pattern: "^B\\d{4}-.+\\.md$", body: { "## 现象": "" } } },
+      });
+      writeFixture(root, [
+        {
+          path: "B0001-x.md",
+          content: "---\n---\n\n```\n## 现象\n```\n",
+        },
+      ]);
+      const r = resolveDirectoryTree(root);
+      expect(r.errors.some((e) => e.type === "missing-required-section")).toBe(true);
+    });
+
+    it("ATX 关闭符 `## 现象 ##` 与 `## 现象` 等价", () => {
+      writeJson(root, "schemark.json", {
+        strict: true,
+        files: { bug: { pattern: "^B\\d{4}-.+\\.md$", body: { "## 现象": "" } } },
+      });
+      writeFixture(root, [
+        { path: "B0001-x.md", content: "---\n---\n\n## 现象 ##\n" },
+      ]);
+      const r = resolveDirectoryTree(root);
+      expect(r.errors).toEqual([]);
+    });
+
+    it("body key 非法格式(无空格) → config-error", () => {
+      writeJson(root, "schemark.json", {
+        strict: true,
+        files: { bug: { pattern: "^B\\d{4}-.+\\.md$", body: { "##没空格": "" } } },
+      });
+      writeFixture(root, [{ path: "B0001-x.md", content: "---\n---\n" }]);
+      const r = resolveDirectoryTree(root);
+      expect(r.errors.some((e) => e.type === "config-invalid" || e.type === "config-error")).toBe(true);
+    });
+  });
 });

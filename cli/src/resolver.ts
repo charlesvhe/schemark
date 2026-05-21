@@ -31,6 +31,7 @@ export interface ResolveError {
     | "duplicate-typekey"
     | "missing-required-rule"
     | "missing-required-frontmatter"
+    | "missing-required-section"
     | "frontmatter-validation"
     | "conversion"
     | "template-undefined-capture"
@@ -322,10 +323,18 @@ function handleFile(
     return matched.typeKey;
   }
 
-  const fm = extractFrontmatter(fullPath, fileRule, rel, result);
-  if (fm === undefined) {
+  const parsed = readMarkdown(fullPath, rel, result);
+  if (parsed === undefined) {
     const fmErr = result.errors.filter((e) => e.path === rel).pop();
-    result.files.push({ path: rel, frontmatter: {}, schemark: fmErr?.message ?? "frontmatter 校验失败" });
+    result.files.push({ path: rel, frontmatter: {}, schemark: fmErr?.message ?? "读取 markdown 失败" });
+    return matched.typeKey;
+  }
+
+  const fm = validateFrontmatter(parsed.data, fileRule, rel, result);
+  const bodyOk = validateBody(parsed.content, fileRule, rel, result);
+  if (fm === undefined || !bodyOk) {
+    const lastErr = result.errors.filter((e) => e.path === rel).pop();
+    result.files.push({ path: rel, frontmatter: fm ?? {}, schemark: lastErr?.message ?? "校验失败" });
     return matched.typeKey;
   }
 
@@ -426,13 +435,16 @@ function deriveErrorMessage(e: unknown): string {
   return (e as Error).message;
 }
 
-function extractFrontmatter(
+interface ParsedMarkdown {
+  data: Record<string, unknown>;
+  content: string;
+}
+
+function readMarkdown(
   fullPath: string,
-  rule: FileRule,
   rel: string,
   result: ResolveResult,
-): Record<string, unknown> | undefined {
-  let parsedData: Record<string, unknown> = {};
+): ParsedMarkdown | undefined {
   try {
     const raw = readFileSync(fullPath, "utf8");
     const parsed = matter(raw, {
@@ -440,40 +452,44 @@ function extractFrontmatter(
         yaml: (s: string) => yaml.load(s, { schema: yaml.JSON_SCHEMA }) as object,
       },
     });
-    parsedData = (parsed.data ?? {}) as Record<string, unknown>;
+    return {
+      data: (parsed.data ?? {}) as Record<string, unknown>,
+      content: parsed.content ?? "",
+    };
   } catch (e) {
     result.errors.push({
       path: rel,
       type: "frontmatter-validation",
-      message: `读取/解析 frontmatter 失败: ${(e as Error).message}`,
+      message: `读取/解析 markdown 失败: ${(e as Error).message}`,
     });
     return undefined;
   }
+}
 
+function validateFrontmatter(
+  data: Record<string, unknown>,
+  rule: FileRule,
+  rel: string,
+  result: ResolveResult,
+): Record<string, unknown> | undefined {
   const fmSpec = rule.frontmatter;
-  if (!fmSpec) return parsedData;
+  if (!fmSpec) return data;
 
   const fullSchema: Record<string, unknown> = { type: "object", ...fmSpec };
   try {
     const validate = compileSchema(fullSchema);
-    const ok = validate(parsedData);
-    if (!ok) {
-      const issues = formatAjvErrors(validate.errors);
-      let hasMissing = false;
-      for (const issue of issues) {
-        const isRequired = issue.message.includes("must have required property");
-        result.errors.push({
-          path: rel,
-          type: isRequired ? "missing-required-frontmatter" : "frontmatter-validation",
-          message: `${issue.path}: ${issue.message}`,
-        });
-        if (isRequired) hasMissing = true;
-      }
-      if (hasMissing && issues.length === issues.filter((i) => i.message.includes("must have required property")).length) {
-        return undefined;
-      }
-      return undefined;
+    const ok = validate(data);
+    if (ok) return data;
+    const issues = formatAjvErrors(validate.errors);
+    for (const issue of issues) {
+      const isRequired = issue.message.includes("must have required property");
+      result.errors.push({
+        path: rel,
+        type: isRequired ? "missing-required-frontmatter" : "frontmatter-validation",
+        message: `${issue.path}: ${issue.message}`,
+      });
     }
+    return undefined;
   } catch (e) {
     result.errors.push({
       path: rel,
@@ -482,6 +498,58 @@ function extractFrontmatter(
     });
     return undefined;
   }
+}
 
-  return parsedData;
+function validateBody(
+  content: string,
+  rule: FileRule,
+  rel: string,
+  result: ResolveResult,
+): boolean {
+  const bodySpec = rule.body;
+  if (!bodySpec) return true;
+  const headings = parseHeadings(content);
+  let ok = true;
+  for (const declared of Object.keys(bodySpec)) {
+    const m = /^(#{1,6}) (.+)$/.exec(declared);
+    if (!m) continue;
+    const level = m[1]!.length;
+    const text = m[2]!.trim();
+    const hit = headings.some((h) => h.level === level && h.text === text);
+    if (!hit) {
+      ok = false;
+      result.errors.push({
+        path: rel,
+        type: "missing-required-section",
+        message: `body: 缺少章节 "${declared}"`,
+      });
+    }
+  }
+  return ok;
+}
+
+function parseHeadings(content: string): Array<{ level: number; text: string }> {
+  const out: Array<{ level: number; text: string }> = [];
+  const lines = content.split(/\r?\n/);
+  let fence: string | undefined;
+  for (const line of lines) {
+    const fenceMatch = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+    if (fenceMatch) {
+      const marker = fenceMatch[1]![0]!;
+      if (fence === undefined) {
+        fence = marker;
+      } else if (fence === marker) {
+        fence = undefined;
+      }
+      continue;
+    }
+    if (fence !== undefined) continue;
+    const h = /^(#{1,6}) +(.+?)\s*$/.exec(line);
+    if (!h) continue;
+    let text = h[2]!;
+    text = text.replace(/\s+#+\s*$/, "").trim();
+    if (text.length === 0) continue;
+    out.push({ level: h[1]!.length, text });
+  }
+  return out;
 }

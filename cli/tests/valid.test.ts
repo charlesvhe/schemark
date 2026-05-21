@@ -80,4 +80,23 @@ describe("runValid", () => {
     const parsed = JSON.parse(r.output) as Array<{ type: string }>;
     expect(parsed.some((e) => e.type === "duplicate-typekey")).toBe(true);
   });
+
+  it("body 缺章节 → missing-required-section,exitCode 1", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      files: {
+        bug: {
+          pattern: "^B\\d{4}-.+\\.md$",
+          body: { "## 重现步骤": "", "## 修复细节": "" },
+        },
+      },
+    });
+    writeFixture(root, [{ path: "B0001-x.md", content: "---\n---\n\n## 重现步骤\n" }]);
+    const r = runValid(root, { json: true });
+    expect(r.exitCode).toBe(1);
+    const parsed = JSON.parse(r.output) as Array<{ type: string; message: string }>;
+    const hit = parsed.find((e) => e.type === "missing-required-section");
+    expect(hit).toBeDefined();
+    expect(hit!.message).toContain("## 修复细节");
+  });
 });

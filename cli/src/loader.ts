@@ -2,7 +2,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const RESERVED_DIR_KEYS = new Set(["pattern", "required", "directories", "files"]);
-const RESERVED_FILE_KEYS = new Set(["pattern", "required", "frontmatter"]);
+const RESERVED_FILE_KEYS = new Set(["pattern", "required", "frontmatter", "body"]);
+
+const BODY_HEADING_RE = /^#{1,6} \S.*$/;
 
 export interface MetaFieldObject {
   value: string;
@@ -37,6 +39,7 @@ export interface FileRule {
   pattern: string;
   required?: boolean;
   frontmatter?: Record<string, unknown>;
+  body?: Record<string, string>;
   [metaField: string]: unknown;
 }
 
@@ -151,6 +154,12 @@ function walkRules(
       if (reservedKeys.has(k)) continue;
       validateMetaFieldValue(v, source, `${path}.${typeKey}.${k}`);
     }
+    if (!isDir) {
+      const body = (rule as FileRule).body;
+      if (body !== undefined) {
+        validateBodyShape(body, source, `${path}.${typeKey}.body`);
+      }
+    }
     const childAncestors = [...ancestorTypeKeys, typeKey];
     if (isDir) {
       const dirRule = rule as DirectoryRule;
@@ -168,6 +177,23 @@ function validateMetaFieldValue(v: unknown, source: string, fieldPath: string): 
   const obj = v as Record<string, unknown>;
   if (typeof obj.value !== "string") {
     throw new ConfigError(source, `${fieldPath}.value 必填,且必须是字符串模板`);
+  }
+}
+
+function validateBodyShape(body: unknown, source: string, fieldPath: string): void {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new ConfigError(source, `${fieldPath} 必须是对象,key 为 markdown 章节标题`);
+  }
+  for (const [k, v] of Object.entries(body as Record<string, unknown>)) {
+    if (!BODY_HEADING_RE.test(k)) {
+      throw new ConfigError(
+        source,
+        `${fieldPath} 的 key "${k}" 不是合法的 ATX 标题,期望形如 "## 标题文本"`,
+      );
+    }
+    if (typeof v !== "string") {
+      throw new ConfigError(source, `${fieldPath}["${k}"] 必须是字符串`);
+    }
   }
 }
 
