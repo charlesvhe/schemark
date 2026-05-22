@@ -1,4 +1,4 @@
-import { resolveDirectoryTree, type ResolveError } from "../resolver.js";
+import { resolveSubtree, type ResolveError } from "../resolver.js";
 
 export interface ValidOptions {
   json?: boolean;
@@ -11,7 +11,7 @@ export interface ValidResult {
 }
 
 export function runValid(dir: string, options: ValidOptions = {}): ValidResult {
-  const result = resolveDirectoryTree(dir);
+  const result = resolveSubtree(dir);
   const errors = result.errors;
   const exitCode = errors.length > 0 ? 1 : 0;
 

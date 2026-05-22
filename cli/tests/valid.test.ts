@@ -99,4 +99,26 @@ describe("runValid", () => {
     expect(hit).toBeDefined();
     expect(hit!.message).toContain("## 修复细节");
   });
+
+  it("子目录入口:自动向上找配置后只 valid 子树", () => {
+    writeJson(root, "schemark.json", ROOT_CONFIG);
+    writeFixture(root, [
+      {
+        path: "20260401-20260430-项目启动/meeting-20260415-站会.md",
+        content: "---\nattendees: [\"张三\"]\nduration: 10\n---\n",
+      },
+      { path: "garbage-sibling/x.md", content: "---\n---\n" },
+    ]);
+    const r = runValid(`${root}/20260401-20260430-项目启动`);
+    expect(r.exitCode).toBe(0);
+    expect(r.output).toBe("No errors found");
+  });
+
+  it("子目录入口:超出 3 层未找到配置 → exitCode 1", () => {
+    writeJson(root, "schemark.json", { strict: false, files: {} });
+    writeFixture(root, [{ path: "a/b/c/d/keep.txt", content: "x" }]);
+    const r = runValid(`${root}/a/b/c/d`);
+    expect(r.exitCode).toBe(1);
+    expect(r.output.toLowerCase()).toContain("schemark.json");
+  });
 });

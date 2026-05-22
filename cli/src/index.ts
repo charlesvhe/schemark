@@ -1,6 +1,7 @@
 export {
   loadConfigFromFile,
   findConfigInDir,
+  findConfigUpwards,
   validateConfigInvariants,
   configToEffective,
   inheritFromParent,
@@ -12,13 +13,16 @@ export {
   type EffectiveConfig,
   type MetaFieldValue,
   type MetaFieldObject,
+  type ConfigUpwardsResult,
 } from "./loader.js";
 
 export {
   resolveDirectoryTree,
+  resolveSubtree,
   type ResolveError,
   type ResolvedFile,
   type ResolveResult,
+  type ResolveSubtreeOptions,
 } from "./resolver.js";
 
 export {

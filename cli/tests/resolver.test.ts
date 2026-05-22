@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { resolveDirectoryTree } from "../src/resolver.js";
+import { resolveDirectoryTree, resolveSubtree } from "../src/resolver.js";
 import { ROOT_CONFIG, makeTempDir, writeFixture, writeJson } from "./helpers.js";
 
 describe("resolveDirectoryTree", () => {
@@ -446,5 +446,211 @@ describe("resolveDirectoryTree", () => {
       const r = resolveDirectoryTree(root);
       expect(r.errors.some((e) => e.type === "config-invalid" || e.type === "config-error")).toBe(true);
     });
+  });
+});
+
+describe("resolveSubtree", () => {
+  let root: string;
+  let cleanup: () => void;
+
+  beforeEach(() => {
+    const t = makeTempDir();
+    root = t.root;
+    cleanup = t.cleanup;
+  });
+
+  afterEach(() => cleanup());
+
+  it("target = 配置根时,行为与 resolveDirectoryTree 完全一致", () => {
+    writeJson(root, "schemark.json", ROOT_CONFIG);
+    writeFixture(root, [
+      {
+        path: "20260401-20260430-项目启动/meeting-20260415-站会纪要.md",
+        content:
+          "---\nattendees: [\"张三\", \"李四\"]\ntags: [\"daily\"]\nduration: 30\n---\n",
+      },
+    ]);
+    const a = resolveSubtree(root);
+    const b = resolveDirectoryTree(root);
+    expect(a).toEqual(b);
+  });
+
+  it("target 自身无配置,父级有 → 找到并只 walk 子树", () => {
+    writeJson(root, "schemark.json", ROOT_CONFIG);
+    writeFixture(root, [
+      {
+        path: "20260401-20260430-项目启动/meeting-20260415-站会纪要.md",
+        content: "---\nattendees: [\"张三\"]\nduration: 10\n---\n",
+      },
+      {
+        path: "20260501-20260531-第二期/design-x.md",
+        content: "---\nauthor: A\nstatus: draft\n---\n",
+      },
+    ]);
+    const sub = `${root}/20260401-20260430-项目启动`;
+    const r = resolveSubtree(sub);
+    expect(r.errors).toEqual([]);
+    expect(r.files).toHaveLength(1);
+    const f = r.files[0]!;
+    expect(f.path).toBe("20260401-20260430-项目启动/meeting-20260415-站会纪要.md");
+    expect(f.start).toBe("2026-04-01");
+    expect(f.type).toBe("milestone");
+  });
+
+  it("子树的 ResolvedFile 字段与整树 walk 一致(等价对照)", () => {
+    writeJson(root, "schemark.json", ROOT_CONFIG);
+    writeFixture(root, [
+      {
+        path: "20260401-20260430-项目启动/meeting-20260415-站会纪要.md",
+        content: "---\nattendees: [\"张三\"]\nduration: 10\n---\n",
+      },
+      {
+        path: "20260501-20260531-第二期/design-x.md",
+        content: "---\nauthor: A\nstatus: draft\n---\n",
+      },
+    ]);
+    const full = resolveDirectoryTree(root);
+    const sub = resolveSubtree(`${root}/20260401-20260430-项目启动`);
+    const fromFull = full.files.find((f) =>
+      f.path.startsWith("20260401-20260430-项目启动/"),
+    );
+    expect(sub.files).toHaveLength(1);
+    expect(sub.files[0]).toEqual(fromFull);
+  });
+
+  it("超出向上层数(默认 3)时报 config-error", () => {
+    writeJson(root, "schemark.json", { strict: false, files: {} });
+    writeFixture(root, [{ path: "a/b/c/d/e/keep.txt", content: "x" }]);
+    const r = resolveSubtree(`${root}/a/b/c/d/e`);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]!.type).toBe("config-error");
+    expect(r.errors[0]!.message).toContain("未在");
+    expect(r.errors[0]!.message).toContain("3 层");
+  });
+
+  it("maxUpwards=0 时只看自身", () => {
+    writeJson(root, "schemark.json", { strict: false, files: {} });
+    writeFixture(root, [{ path: "sub/keep.txt", content: "x" }]);
+    const r = resolveSubtree(`${root}/sub`, { maxUpwards: 0 });
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]!.type).toBe("config-error");
+  });
+
+  it("maxUpwards 可调:5 层之外仍可找到", () => {
+    writeJson(root, "schemark.json", { strict: false, files: {} });
+    writeFixture(root, [{ path: "a/b/c/d/keep.txt", content: "x" }]);
+    const r = resolveSubtree(`${root}/a/b/c/d`, { maxUpwards: 5 });
+    expect(r.errors).toEqual([]);
+  });
+
+  it("target 不存在 → config-error", () => {
+    writeJson(root, "schemark.json", { strict: false, files: {} });
+    const r = resolveSubtree(`${root}/missing`);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]!.type).toBe("config-error");
+  });
+
+  it("target 是文件 → config-error 提示仅支持子文件夹", () => {
+    writeJson(root, "schemark.json", { strict: false, files: {} });
+    writeFixture(root, [{ path: "a.md", content: "---\n---\n" }]);
+    const r = resolveSubtree(`${root}/a.md`);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]!.type).toBe("config-error");
+    expect(r.errors[0]!.message).toContain("子文件夹");
+  });
+
+  it("路径段未匹配且 strict=true → unmatched-directory,不再 walk", () => {
+    writeJson(root, "schemark.json", ROOT_CONFIG);
+    writeFixture(root, [
+      {
+        path: "garbage/meeting-20260415-x.md",
+        content: "---\nattendees: [\"张三\"]\n---\n",
+      },
+    ]);
+    const r = resolveSubtree(`${root}/garbage`);
+    expect(r.files).toEqual([]);
+    expect(r.errors.some((e) => e.type === "unmatched-directory")).toBe(true);
+  });
+
+  it("路径段未匹配且 strict=false → 不报错,也不 walk", () => {
+    writeJson(root, "schemark.json", { ...ROOT_CONFIG, strict: false });
+    writeFixture(root, [
+      {
+        path: "garbage/meeting-20260415-x.md",
+        content: "---\nattendees: [\"张三\"]\n---\n",
+      },
+    ]);
+    const r = resolveSubtree(`${root}/garbage`);
+    expect(r.errors).toEqual([]);
+    expect(r.files).toEqual([]);
+  });
+
+  it("路径段歧义 → ambiguous-match,不再 walk", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      directories: {
+        a: { pattern: "^foo$" },
+        b: { pattern: "^foo$" },
+      },
+    });
+    writeFixture(root, [{ path: "foo/x.md", content: "---\n---\n" }]);
+    const r = resolveSubtree(`${root}/foo`);
+    expect(r.errors.some((e) => e.type === "ambiguous-match")).toBe(true);
+    expect(r.files).toEqual([]);
+  });
+
+  it("路径段派生失败(meta-validation) → 报错,不 walk", () => {
+    writeJson(root, "schemark.json", {
+      strict: true,
+      directories: {
+        m: {
+          pattern: "^x-(?<n>.+)$",
+          n: { type: "integer", value: "${n}" },
+          files: { f: { pattern: "^a\\.md$" } },
+        },
+      },
+    });
+    writeFixture(root, [{ path: "x-abc/a.md", content: "---\n---\n" }]);
+    const r = resolveSubtree(`${root}/x-abc`);
+    expect(r.errors.some((e) => e.type === "conversion")).toBe(true);
+    expect(r.files).toEqual([]);
+  });
+
+  it("中间目录的 schemark.json 覆盖父级", () => {
+    writeJson(root, "schemark.json", ROOT_CONFIG);
+    writeJson(root, "20260401-20260430-项目启动/schemark.json", {
+      strict: true,
+      files: {
+        retro: {
+          pattern: "^retro-(?<date>\\d{8})\\.md$",
+          date: { type: "string", format: "date", value: "${date}" },
+        },
+      },
+    });
+    writeFixture(root, [
+      {
+        path: "20260401-20260430-项目启动/retro-20260420.md",
+        content: "---\n---\n",
+      },
+    ]);
+    const r = resolveSubtree(`${root}/20260401-20260430-项目启动`);
+    expect(r.errors).toEqual([]);
+    expect(r.files).toHaveLength(1);
+    const f = r.files[0]!;
+    expect(f.date).toBe("2026-04-20");
+  });
+
+  it("子树外的兄弟错误不会被报告", () => {
+    writeJson(root, "schemark.json", ROOT_CONFIG);
+    writeFixture(root, [
+      {
+        path: "20260401-20260430-项目启动/meeting-20260415-x.md",
+        content: "---\nattendees: [\"张三\"]\n---\n",
+      },
+      { path: "garbage-sibling/x.md", content: "---\n---\n" },
+    ]);
+    const r = resolveSubtree(`${root}/20260401-20260430-项目启动`);
+    expect(r.errors).toEqual([]);
+    expect(r.files.every((f) => f.path.startsWith("20260401-"))).toBe(true);
   });
 });

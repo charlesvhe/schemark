@@ -1,5 +1,5 @@
 import { readdirSync, statSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import matter from "gray-matter";
 import yaml from "js-yaml";
 import {
@@ -7,6 +7,7 @@ import {
   EffectiveConfig,
   FileRule,
   findConfigInDir,
+  findConfigUpwards,
   getMetaFieldEntries,
   inheritFromParent,
   loadConfigFromFile,
@@ -96,6 +97,82 @@ export function resolveDirectoryTree(rootDir: string): ResolveResult {
     result,
   );
 
+  return result;
+}
+
+export interface ResolveSubtreeOptions {
+  maxUpwards?: number;
+}
+
+export function resolveSubtree(
+  targetDir: string,
+  options: ResolveSubtreeOptions = {},
+): ResolveResult {
+  const result: ResolveResult = { files: [], errors: [] };
+  const target = resolve(targetDir);
+  const maxUpwards = options.maxUpwards ?? 3;
+
+  let targetStat: ReturnType<typeof statSync>;
+  try {
+    targetStat = statSync(target);
+  } catch (e) {
+    result.errors.push({
+      path: target,
+      type: "config-error",
+      message: `读取目标路径失败: ${(e as Error).message}`,
+    });
+    return result;
+  }
+  if (!targetStat.isDirectory()) {
+    result.errors.push({
+      path: target,
+      type: "config-error",
+      message: "仅支持子文件夹作为入参",
+    });
+    return result;
+  }
+
+  const found = findConfigUpwards(target, maxUpwards);
+  if (!found) {
+    result.errors.push({
+      path: target,
+      type: "config-error",
+      message: `未在 ${target} 及向上 ${maxUpwards} 层内找到 schemark.json`,
+    });
+    return result;
+  }
+
+  const rootDir = found.configDir;
+  const rootEffective = loadAndValidateConfig(found.configPath, result.errors);
+  if (!rootEffective) return result;
+
+  const rel = relative(rootDir, target);
+  const segments = rel === "" ? [] : rel.split(sep);
+
+  if (segments.length === 0) {
+    walk(
+      rootDir,
+      rootDir,
+      { effective: rootEffective, accumulatedGroups: {}, parentMatch: undefined },
+      result,
+    );
+    return result;
+  }
+
+  let cwd = rootDir;
+  let ctx: DirContext = {
+    effective: rootEffective,
+    accumulatedGroups: {},
+    parentMatch: undefined,
+  };
+  for (const name of segments) {
+    const next = join(cwd, name);
+    const r = matchAndEnter(rootDir, next, name, ctx, result);
+    if (!r.ok) return result;
+    ctx = r.childCtx;
+    cwd = next;
+  }
+  walk(rootDir, target, ctx, result);
   return result;
 }
 
@@ -205,6 +282,25 @@ function handleDirectory(
   ctx: DirContext,
   result: ResolveResult,
 ): string | undefined {
+  const r = matchAndEnter(rootDir, fullPath, name, ctx, result);
+  if (r.ok) {
+    walk(rootDir, fullPath, r.childCtx, result);
+    return r.matchedTypeKey;
+  }
+  return r.matchedTypeKey;
+}
+
+type EnterDirResult =
+  | { ok: true; matchedTypeKey: string; childCtx: DirContext }
+  | { ok: false; matchedTypeKey?: string };
+
+function matchAndEnter(
+  rootDir: string,
+  fullPath: string,
+  name: string,
+  ctx: DirContext,
+  result: ResolveResult,
+): EnterDirResult {
   const rel = relative(rootDir, fullPath);
   const matches = matchRules(name, ctx.effective.directories);
 
@@ -216,7 +312,7 @@ function handleDirectory(
         message: `目录名 "${name}" 未匹配任何 directories.pattern`,
       });
     }
-    return undefined;
+    return { ok: false };
   }
   if (matches.length > 1) {
     result.errors.push({
@@ -224,7 +320,7 @@ function handleDirectory(
       type: "ambiguous-match",
       message: `目录名 "${name}" 同时匹配多条规则: ${matches.map((m) => m.typeKey).join(", ")}`,
     });
-    return undefined;
+    return { ok: false };
   }
 
   const matched = matches[0]!;
@@ -235,7 +331,7 @@ function handleDirectory(
     metaForThisDir = deriveMetaFields(dirRule, true, matched.captures, rel);
   } catch (e) {
     pushDeriveError(e, rel, result);
-    return matched.typeKey;
+    return { ok: false, matchedTypeKey: matched.typeKey };
   }
 
   if (matched.typeKey in ctx.accumulatedGroups) {
@@ -244,7 +340,7 @@ function handleDirectory(
       type: "duplicate-typekey",
       message: `运行时 typeKey 冲突: "${matched.typeKey}" 在解析路径上重复`,
     });
-    return matched.typeKey;
+    return { ok: false, matchedTypeKey: matched.typeKey };
   }
   const nextGroups: Record<string, Record<string, unknown>> = {
     ...ctx.accumulatedGroups,
@@ -255,23 +351,21 @@ function handleDirectory(
   let childEffective: EffectiveConfig;
   if (childConfigPath) {
     const loaded = loadAndValidateConfig(childConfigPath, result.errors);
-    if (!loaded) return matched.typeKey;
+    if (!loaded) return { ok: false, matchedTypeKey: matched.typeKey };
     childEffective = loaded;
   } else {
     childEffective = inheritFromParent(dirRule, rel);
   }
 
-  walk(
-    rootDir,
-    fullPath,
-    {
+  return {
+    ok: true,
+    matchedTypeKey: matched.typeKey,
+    childCtx: {
       effective: childEffective,
       accumulatedGroups: nextGroups,
       parentMatch: matched,
     },
-    result,
-  );
-  return matched.typeKey;
+  };
 }
 
 function handleFile(

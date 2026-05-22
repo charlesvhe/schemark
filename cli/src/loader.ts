@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const RESERVED_DIR_KEYS = new Set(["pattern", "required", "directories", "files"]);
 const RESERVED_FILE_KEYS = new Set(["pattern", "required", "frontmatter", "body"]);
@@ -116,6 +116,27 @@ function derefLocalRefs(root: Record<string, unknown>): Record<string, unknown> 
 export function findConfigInDir(dir: string): string | undefined {
   const candidate = join(dir, "schemark.json");
   return existsSync(candidate) ? candidate : undefined;
+}
+
+export interface ConfigUpwardsResult {
+  configPath: string;
+  configDir: string;
+  hops: number;
+}
+
+export function findConfigUpwards(
+  startDir: string,
+  maxLevels = 3,
+): ConfigUpwardsResult | undefined {
+  let cur = resolve(startDir);
+  for (let h = 0; h <= maxLevels; h++) {
+    const p = findConfigInDir(cur);
+    if (p) return { configPath: p, configDir: cur, hops: h };
+    const parent = dirname(cur);
+    if (parent === cur) break;
+    cur = parent;
+  }
+  return undefined;
 }
 
 export function validateConfigInvariants(config: SchemarkConfig, source: string): void {

@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { resolveDirectoryTree, type ResolveError, type ResolvedFile } from "../resolver.js";
+import { resolveSubtree, type ResolveError, type ResolvedFile } from "../resolver.js";
 
 export interface MetaOptions {
   output?: string;
@@ -22,7 +22,7 @@ const SKIP_TYPES: ReadonlySet<ResolveError["type"]> = new Set([
 ]);
 
 export function runMeta(dir: string, options: MetaOptions = {}): MetaResult {
-  const result = resolveDirectoryTree(dir);
+  const result = resolveSubtree(dir);
   const skipped: ResolveError[] = [];
   const fatal: ResolveError[] = [];
   for (const err of result.errors) {

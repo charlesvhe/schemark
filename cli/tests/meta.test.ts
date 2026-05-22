@@ -124,4 +124,22 @@ describe("runMeta", () => {
     expect(r.files).toHaveLength(1);
     expect(r.files[0]!.schemark).toContain("## 修复细节");
   });
+
+  it("子目录入口:产物 path 相对配置根,字段含路径派生 meta", () => {
+    writeJson(root, "schemark.json", ROOT_CONFIG);
+    writeFixture(root, [
+      {
+        path: "20260401-20260430-项目启动/meeting-20260415-站会纪要.md",
+        content: "---\nattendees: [\"张三\"]\nduration: 30\n---\n",
+      },
+    ]);
+    const r = runMeta(`${root}/20260401-20260430-项目启动`);
+    expect(r.exitCode).toBe(0);
+    expect(r.files).toHaveLength(1);
+    const f = r.files[0]!;
+    expect(f.path).toBe("20260401-20260430-项目启动/meeting-20260415-站会纪要.md");
+    expect(f.start).toBe("2026-04-01");
+    expect(f.type).toBe("milestone");
+    expect(f.date).toBe("2026-04-15");
+  });
 });

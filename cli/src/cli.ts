@@ -12,7 +12,7 @@ export function buildCli(): Command {
 
   program
     .command("valid")
-    .description("Validate a directory tree against its schemark.json configuration")
+    .description("Validate a directory tree against its schemark.json (auto-discovers config up to 3 parent levels)")
     .argument("[dir]", "Root directory to validate", ".")
     .option("--json", "Output errors as a JSON array")
     .action((dir: string, opts: { json?: boolean }) => {
@@ -28,7 +28,7 @@ export function buildCli(): Command {
 
   program
     .command("meta")
-    .description("Scan a directory tree and emit derived meta JSON for each matched Markdown file")
+    .description("Scan a directory tree and emit derived meta JSON (auto-discovers schemark.json up to 3 parent levels)")
     .argument("[dir]", "Root directory to scan", ".")
     .option("-o, --output <file>", "Write JSON output to a file instead of stdout")
     .option("--strict", "Exit with code 1 when any file is skipped due to conversion/required errors")
