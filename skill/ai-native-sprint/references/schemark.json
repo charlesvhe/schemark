@@ -1,0 +1,107 @@
+{
+  "strict": true,
+  "$defs": {
+    "$comment": "定义可复用规则",
+    "sprintRule": {
+      "pattern": "^(?<name>(?<start>\\d{8})-(?<end>\\d{8})-(?<version>[\\w\\.]+)-.+)$",
+      "迭代名称": "${name}",
+      "迭代计划开始": { "type": "string", "format": "date", "value": "${start}" },
+      "迭代计划结束": { "type": "string", "format": "date", "value": "${end}" },
+      "迭代版本": { "type": "string", "value": "${version}" },
+      "files": {
+        "readme": {
+          "pattern": "^README\\.md$",
+          "required": true,
+          "type": "迭代说明",
+          "frontmatter": {
+            "properties": {
+              "迭代场景": { "type": "string", "enum": ["缺陷修复", "简单需求", "标准需求", "复杂需求"] },
+              "迭代负责人": { "type": "string", "pattern": "^.+ \\w+$", "$comment": "姓名+域账号 例如：张三 zhangsan" },
+              "产品负责人": { "type": "string", "pattern": "^.+ \\w+$", "$comment": "姓名+域账号 例如：张三 zhangsan" },
+              "测试负责人": { "type": "string", "pattern": "^.+ \\w+$", "$comment": "姓名+域账号 例如：张三 zhangsan" },
+              "实际结束时间": { "type": "string", "format": "date" }
+            },
+            "required": ["迭代负责人", "产品负责人", "测试负责人", "实际结束时间"]
+          },
+          "body":{
+            "## 迭代范围": "| PRD/OpenSpec | 名称 | 责任开发 |\n| --- | --- | --- |\n| <!-- PRD/OpenSpec 相对路径 --> | xxx | <!-- 姓名+域账号 例如：张三 zhangsan --> |\n",
+            "## 提测计划": "| 轮次 | 提测范围 | 计划提测时间 | 提测人 |\n| --- | --- | --- | --- |\n| 1 | <!-- 提测内容描述 --> | 20260101 | <!-- 姓名+域账号 例如：张三 zhangsan --> |\n",
+            "## 知识库回填": "是否需要回填：[ ] 是 / [ ] 否\n负责人：xxx\n回填状态：[ ] 未开始 / [ ] 完成\n",
+            "## 变更记录": "| 日期 | 变更内容 | 变更人 | 变更原因 | 工期影响 | 工时影响 |\n| --- | --- | --- | --- | --- | --- |\n| 20260101 | xxx | <!-- 姓名+域账号 例如：张三 zhangsan --> | xxx | xxx | xxx |\n"
+          }
+        },
+        "task": {
+          "pattern": "^(?<id>T\\d{4})-(?<title>.+)\\.md$",
+          "type": "任务",
+          "id": { "type": "string", "pattern": "^T\\d{4}$", "value": "${id}" },
+          "标题": "${title}",
+          "frontmatter": {
+            "properties": {
+              "负责人": { "type": "string", "pattern": "^.+ \\w+$", "$comment": "姓名+域账号 例如：张三 zhangsan" },
+              "预估工时": { "type": "number", "minimum": 0 },
+              "已投入工时": { "type": "number", "minimum": 0 },
+              "标签": { "type": "array", "items": { "type": "string" } },
+              "状态": { "type": "string", "enum": ["进行中", "完成", "取消"] },
+              "关联内容": { "type": "array", "items": { "type": "string" }, 
+                "$comment": "PRD或OpenSpec等相关内容的相对路径",
+                "examples": [
+                  "pm/epic/E01-admin-management/F01-film-management/README.md",
+                  "pm/epic/E01-admin-management/F01-film-management/US01-film-list-query.md",
+                  "openspec/changes/film-management"
+                ]
+              }
+            },
+            "required": ["负责人", "预估工时", "已投入工时", "状态"]
+          }
+        },
+        "bug": {
+          "pattern": "^(?<id>B\\d{4})-(?<title>.+)\\.md$",
+          "type": "缺陷",
+          "id": { "type": "string", "pattern": "^B\\d{4}$", "value": "${id}" },
+          "标题": "${title}",
+          "frontmatter": {
+            "properties": {
+              "优先级": { "type": "string", "enum": ["紧急", "高", "中", "低"] },
+              "严重性": { "type": "string", "enum": ["致命", "严重", "一般", "细微"] },
+              "提出人": { "type": "string", "pattern": "^.+ \\w+$", "$comment": "姓名+域账号 例如：张三 zhangsan" },
+              "处理人": { "type": "string", "pattern": "^.+ \\w+$", "$comment": "姓名+域账号 例如：张三 zhangsan" },
+              "引起人": { "type": "string", "pattern": "^.+ \\w+$", "$comment": "姓名+域账号 例如：张三 zhangsan" },
+              "缺陷起因": { "type": "string", "enum": ["编码", "研发设计", "测试", "需求", "交互视觉设计", "资源或效果", "部署", "文档问题", "安全问题", "建议", "其他"] },
+              "解决方法": { "type": "string", "enum": ["已修复", "延迟解决", "不计划修复", "临时解决", "已知问题", "误报问题", "无法修复", "部署问题", "不再是问题", "无法复现"] },
+              "状态": { "type": "string", "enum": ["待修复", "待验证", "拒绝", "挂起"] },
+              "打回原因": { "type": "string", "enum": ["误报的问题", "设计如此", "需要更多信息", "重复提交"] },
+              "解决版本": { "type": "string" },
+              "不通过版本": { "type": "string" },
+              "重开版本": { "type": "string" }
+            },
+            "required": ["优先级", "严重性", "提出人", "处理人", "状态"]
+          },
+          "body":{
+            "## 重现步骤": "[操作步骤]\n[现象]\n[期待结果]\n",
+            "## 修复细节": "<!-- 修复细节描述 -->\n"
+          }
+        }
+      },
+      "directories": {
+        "assets": {
+          "pattern": "^assets$"
+        }
+      }
+    }
+  },
+  "directories": {
+    "sprint": { "已归档": false, "$ref": "#/$defs/sprintRule" },
+    "archive": {
+      "pattern": "^archive$",
+      "directories": {
+        "sprint": { "已归档": true, "$ref": "#/$defs/sprintRule" }
+      }
+    }
+  },
+  "files": {
+    "readme": {
+      "pattern": "^README\\.md$",
+      "type": "整体说明"
+    }
+  }
+}

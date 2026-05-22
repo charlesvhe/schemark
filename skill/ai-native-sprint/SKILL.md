@@ -1,6 +1,6 @@
 ---
 name: ai-native-sprint
-description: 管理软件开发迭代（Sprint）、任务（Task）、缺陷（Bug）的创建、状态流转和归档。当用户提到"创建迭代"、"新建任务"、"添加bug"、"标记完成"、"归档sprint"、"迭代管理"、"任务管理"、"缺陷管理"或使用schemark项目结构时触发此技能。
+description: 管理软件开发迭代（Sprint）、任务（Task）、缺陷（Bug）的创建、状态流转和归档。当用户提到"初始化项目"、"创建迭代"、"新建任务"、"添加bug"、"标记完成"、"归档sprint"、"迭代管理"、"任务管理"、"缺陷管理"或使用schemark项目结构时触发此技能。
 ---
 
 # AI Native Sprint - 迭代管理技能
@@ -9,12 +9,13 @@ description: 管理软件开发迭代（Sprint）、任务（Task）、缺陷（
 
 ## 核心功能
 
-1. **创建迭代（Sprint）** - 创建符合命名规范的迭代目录和README.md
-2. **创建任务（Task）** - 在迭代中创建T文件
-3. **创建缺陷（Bug）** - 在迭代中创建B文件
-4. **状态流转** - 更新任务/缺陷的状态字段
-5. **归档迭代** - 将完成的迭代移动到archive目录
-6. **校验** - 运行schemark命令进行结构校验
+1. **初始化项目（Init）** - 在指定目录初始化schemark项目结构
+2. **创建迭代（Sprint）** - 创建符合命名规范的迭代目录和README.md
+3. **创建任务（Task）** - 在迭代中创建T文件
+4. **创建缺陷（Bug）** - 在迭代中创建B文件
+5. **状态流转** - 更新任务/缺陷的状态字段
+6. **归档迭代** - 将完成的迭代移动到archive目录
+7. **校验** - 运行schemark命令进行结构校验
 
 ## 工作流程
 
@@ -22,6 +23,7 @@ description: 管理软件开发迭代（Sprint）、任务（Task）、缺陷（
 
 用户可能会用以下方式表达需求：
 
+- **初始化**："初始化一个迭代管理项目"、"在这个目录创建schemark项目"
 - **直接命令式**："创建一个新迭代"、"添加一个任务"、"把这个bug标记为已修复"
 - **描述式**："我们要开始v2.0的开发了"、"测试发现了一个支付的问题"
 
@@ -48,7 +50,7 @@ python3 scripts/find_schemark.py . 3
 
 **示例场景**：
 
-- 用户在 `/project/example/sprint1/` 目录下 → 自动找到 `/project/example/`
+- 用户在 `/project/example/20260201-20260228-v1.0-支付与订单/` 目录下 → 自动找到 `/project/example/`
 - 用户在 `/project/` 目录下 → 自动找到 `/project/example/`
 - 用户在 `/project/docs/` 目录下 → 自动找到 `/project/example/`
 
@@ -79,6 +81,40 @@ schemark -h
 根据用户意图执行相应操作。
 
 ## 操作详解
+
+### 初始化项目（Init）
+
+在用户指定的目录中初始化一个 schemark 迭代管理项目。
+
+**需要收集的信息**：
+
+1. 目标目录路径（用户指定）
+
+**执行步骤**：
+
+1. 确认目标目录存在（不存在则创建）
+2. 检查目标目录中是否已有 `schemark.json`（如已存在则提示用户，避免覆盖）
+3. 从本技能的 `references/` 目录复制文件到目标目录：
+   - `references/schemark.json` → `<目标目录>/schemark.json`
+   - `references/README.md` → `<目标目录>/README.md`
+4. 创建archive目录 `<目标目录>/archive/`
+5. 运行 `schemark valid <目标目录>` 验证初始化结果
+
+**复制命令示例**：
+
+```bash
+SKILL_DIR="$(dirname "$(realpath "$0")")"
+TARGET_DIR="<用户指定目录>"
+
+mkdir -p "$TARGET_DIR/archive"
+cp "$SKILL_DIR/references/schemark.json" "$TARGET_DIR/schemark.json"
+cp "$SKILL_DIR/references/README.md" "$TARGET_DIR/README.md"
+```
+
+**注意事项**：
+- 不要将 references/ 中的文件内容嵌入对话，直接复制文件即可
+- 如果目标目录已有 schemark.json，必须先确认用户是否要覆盖
+- 初始化完成后运行校验确保结构正确
 
 ### 创建迭代（Sprint）
 
@@ -396,8 +432,8 @@ python3 scripts/find_schemark.py <start_dir> [max_depth]
 
 1. **找不到schemark.json**：
    - 首先使用 `find_schemark.py` 在当前目录及其父子目录（3层范围内）自动查找
-   - 如果仍未找到，提示用户这不是一个schemark项目，询问项目根目录
-   - 建议用户检查是否在正确的项目目录中
+   - 如果仍未找到，提示用户这不是一个schemark项目，建议运行初始化操作
+   - 引导用户指定目标目录进行初始化
 
 2. **sprint目录不存在**：提示用户指定的sprint不存在，使用 `find_sprints.py` 列出可用的sprint
 
@@ -407,7 +443,19 @@ python3 scripts/find_schemark.py <start_dir> [max_depth]
 
 ## 示例对话
 
-**示例1：创建新迭代**
+**示例1：初始化项目**
+
+用户："在 /project/my-team 目录初始化一个迭代管理项目"
+
+助手：
+1. 确认目标目录 `/project/my-team` 存在（不存在则创建）
+2. 检查目标目录中是否已有 `schemark.json`
+3. 从 `references/` 目录复制 `schemark.json` 和 `README.md` 到目标目录
+4. 创建 `archive/` 子目录
+5. 运行 `schemark valid /project/my-team`
+6. 告知用户初始化成功
+
+**示例2：创建新迭代**
 
 用户："创建一个新迭代，v2.0数据分析平台，3月1日到3月31日"
 
@@ -418,7 +466,7 @@ python3 scripts/find_schemark.py <start_dir> [max_depth]
 4. 运行`schemark valid .`
 5. 告知用户创建成功
 
-**示例2：添加任务**
+**示例3：添加任务**
 
 用户："在当前迭代添加一个任务：订单数据模型，负责人李伟 liwei，预估20小时"
 
@@ -430,7 +478,7 @@ python3 scripts/find_schemark.py <start_dir> [max_depth]
 5. 运行`schemark valid .`
 6. 告知用户创建成功
 
-**示例3：状态流转**
+**示例4：状态流转**
 
 用户："把T0006标记为完成"
 
@@ -441,7 +489,7 @@ python3 scripts/find_schemark.py <start_dir> [max_depth]
 4. 运行`schemark valid .`
 5. 告知用户更新成功
 
-**示例4：创建缺陷**
+**示例5：创建缺陷**
 
 用户："测试发现了一个高并发重复下单的问题，优先级紧急，严重性致命，提出人赵琳 zhaolin，处理人王浩 wanghao"
 
@@ -455,7 +503,7 @@ python3 scripts/find_schemark.py <start_dir> [max_depth]
 7. 运行`schemark valid .`
 8. 告知用户创建成功
 
-**示例5：归档迭代**
+**示例6：归档迭代**
 
 用户："把v1.0支付与订单迭代归档"
 
