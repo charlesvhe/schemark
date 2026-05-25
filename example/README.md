@@ -1,6 +1,6 @@
 # 迭代管理文档仓库
 
-本目录使用 [Schemark](../README.md) 管理迭代（Sprint）的目录结构、文件命名与内容规范。所有约束定义在 `schemark.json` 中，可通过 `schemark valid` 命令自动校验。
+本目录使用 [Schemark](https://github.com/charlesvhe/schemark) 管理迭代（Sprint）的目录结构、文件命名与内容规范。所有约束定义在 `schemark.json` 中，可通过 `schemark valid` 命令自动校验。
 
 ---
 
