@@ -47,10 +47,13 @@ docs/sprint/
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | 迭代场景 | string | 否 | 枚举：`缺陷修复` / `简单需求` / `标准需求` / `复杂需求` |
-| 迭代负责人 | string | **是** | 格式：`姓名 域账号`，如 `张三 zhangsan` |
-| 产品负责人 | string | **是** | 格式同上 |
-| 测试负责人 | string | **是** | 格式同上 |
+| 迭代负责人 | string | **是** | 格式：`姓名 域账号`，必须出自 `团队成员` |
+| 产品负责人 | string | **是** | 格式同上，必须出自 `团队成员` |
+| 测试负责人 | string | **是** | 格式同上，必须出自 `团队成员` |
 | 实际结束时间 | string | **是** | 日期格式 `yyyy-MM-dd` |
+| 团队成员 | array | **是** | 本迭代涉及的所有人员名册，每条 `姓名 / 域账号 / 角色`，至少 1 条；后续任务/缺陷/迭代各人员字段必须从此列表中选择，避免笔误 |
+
+> **设计取舍**：所有人员（迭代负责人、产品负责人、测试负责人、任务负责人、缺陷提出/处理/引起人、提测人、变更人、验收人、知识库回填负责人、篝火评审人员、迭代范围责任开发）都必须出现在迭代 README 的 `团队成员` 中。新增人员要先追加到 `团队成员`，再写到对应字段，保证全迭代的姓名+域账号拼写来自同一份名册。
 
 ### Body 必须包含的章节
 
@@ -58,7 +61,7 @@ docs/sprint/
 
 | 章节 | 说明 |
 | --- | --- |
-| `## 篝火评审` | 多角色（PM/UED/Backend/Frontend/QA）评审人员与评审报告，由 `ai-native-campfire` skill 生成后回填 |
+| `## 篝火评审` | 多角色（PM/UED/DEV/QA）评审人员与评审报告，由 `ai-native-campfire` skill 生成后回填 |
 | `## 迭代范围` | 本迭代包含的需求与责任人 |
 | `## 提测计划` | 各轮次提测安排，包含计划与实际提测时间 |
 | `## 变更记录` | 迭代过程中的范围或计划变更 |
@@ -76,6 +79,25 @@ docs/sprint/
 产品负责人: 林菲 linfei
 测试负责人: 赵琳 zhaolin
 实际结束时间: 2026-02-28
+团队成员:
+  - 姓名: 张敏
+    域账号: zhangmin
+    角色: 迭代负责人
+  - 姓名: 林菲
+    域账号: linfei
+    角色: PM
+  - 姓名: 赵琳
+    域账号: zhaolin
+    角色: QA
+  - 姓名: 苏婷
+    域账号: suting
+    角色: UED
+  - 姓名: 王浩
+    域账号: wanghao
+    角色: DEV
+  - 姓名: 陈思雨
+    域账号: chensiyu
+    角色: DEV
 ---
 
 # 支付与订单
@@ -84,12 +106,11 @@ docs/sprint/
 
 ## 篝火评审
 
-评审人员：林菲 linfei（PM）、苏婷 suting（UED）、王浩 wanghao（Backend）、陈思雨 chensiyu（Frontend）、赵琳 zhaolin（QA）
+评审人员：林菲 linfei（PM）、苏婷 suting（UED）、王浩 wanghao（DEV）、陈思雨 chensiyu（DEV）、赵琳 zhaolin（QA）
 评审报告内容：
 - PM：验收标准全覆盖，业务规则与现有对账流程一致；建议补充"取消订单后已支付金额回退"的场景。
 - UED：交互覆盖正常与异常路径；建议补充支付通道超时的 loading/重试文案。
-- Backend：API 设计合规，幂等键方案可行；建议在订单查询接口增加 `(user_id, status, created_at)` 索引说明。
-- Frontend：状态机定义清晰；建议补充弱网下的请求取消策略。
+- DEV：API 设计合规，幂等键方案可行；建议在订单查询接口增加 `(user_id, status, created_at)` 索引说明。状态机定义清晰；建议补充弱网下的请求取消策略。
 - QA：边界值与并发场景已覆盖；建议补充"同一幂等键 100 并发"的回归用例。
 
 ## 迭代范围
@@ -266,12 +287,11 @@ schemark web .       # 启动本地 Web 查看器
 ```markdown
 ## 篝火评审
 
-评审人员：林菲 linfei（PM）、苏婷 suting（UED）、王浩 wanghao（Backend）、刘洋 liuyang（Frontend）、赵琳 zhaolin（QA）
+评审人员：林菲 linfei（PM）、苏婷 suting（UED）、王浩 wanghao（DEV）、刘洋 liuyang（DEV）、赵琳 zhaolin（QA）
 评审报告内容：
 - PM：<!-- 通过项 / 待补充项 / 建议修改项 -->
 - UED：...
-- Backend：...
-- Frontend：...
+- DEV：...
 - QA：...
 ```
 
@@ -298,18 +318,36 @@ schemark web .       # 启动本地 Web 查看器
 产品负责人: 林菲 linfei
 测试负责人: 赵琳 zhaolin
 实际结束时间: 2026-03-31
+团队成员:
+  - 姓名: 张敏
+    域账号: zhangmin
+    角色: 迭代负责人
+  - 姓名: 林菲
+    域账号: linfei
+    角色: PM
+  - 姓名: 赵琳
+    域账号: zhaolin
+    角色: QA
+  - 姓名: 苏婷
+    域账号: suting
+    角色: UED
+  - 姓名: 王浩
+    域账号: wanghao
+    角色: DEV
+  - 姓名: 刘洋
+    域账号: liuyang
+    角色: DEV
 ---
 
 # 数据分析平台
 
 ## 篝火评审
 
-评审人员：林菲 linfei（PM）、苏婷 suting（UED）、王浩 wanghao（Backend）、刘洋 liuyang（Frontend）、赵琳 zhaolin（QA）
+评审人员：林菲 linfei（PM）、苏婷 suting（UED）、王浩 wanghao（DEV）、刘洋 liuyang（DEV）、赵琳 zhaolin（QA）
 评审报告内容：
 - PM：MVP 范围与战略目标对齐，建议二周后整体复盘。
 - UED：交互细节充分；建议补充空数据态文案。
-- Backend：选型可行，需在 RFC 阶段对齐订单数据流契约。
-- Frontend：状态机清晰；建议补充权限菜单前置控制。
+- DEV：选型可行，需在 RFC 阶段对齐订单数据流契约。状态机清晰；建议补充权限菜单前置控制。
 - QA：可测试性需加强，缺成功标准与基准数据集。
 
 ## 迭代范围

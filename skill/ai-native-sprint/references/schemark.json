@@ -19,9 +19,24 @@
               "迭代负责人": { "type": "string", "pattern": "^.+ \\w+$", "$comment": "姓名+域账号 例如：张三 zhangsan" },
               "产品负责人": { "type": "string", "pattern": "^.+ \\w+$", "$comment": "姓名+域账号 例如：张三 zhangsan" },
               "测试负责人": { "type": "string", "pattern": "^.+ \\w+$", "$comment": "姓名+域账号 例如：张三 zhangsan" },
-              "实际结束时间": { "type": "string", "format": "date" }
+              "实际结束时间": { "type": "string", "format": "date" },
+              "团队成员": {
+                "type": "array",
+                "minItems": 1,
+                "$comment": "本迭代涉及的所有人员名册。后续任务/缺陷/迭代各负责人字段的姓名+域账号必须从这里选择，避免笔误",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "姓名": { "type": "string", "minLength": 1 },
+                    "域账号": { "type": "string", "pattern": "^\\w+$" },
+                    "角色": { "type": "string", "minLength": 1, "$comment": "如 PM/UED/Backend/Frontend/QA/安全/迭代负责人 等，多角色用 / 分隔" }
+                  },
+                  "required": ["姓名", "域账号"]
+                }
+              }
             },
-            "required": ["迭代负责人", "产品负责人", "测试负责人", "实际结束时间"]
+            "required": ["迭代负责人", "产品负责人", "测试负责人", "实际结束时间", "团队成员"]
           },
           "body":{
             "## 篝火评审": "评审人员：\n评审报告内容：\n",
